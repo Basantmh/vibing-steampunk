@@ -191,7 +191,7 @@ adopted yet.
 
 | PR | Author | Subject | Decision | Reason |
 |---|---|---|---|---|
-| [#108](https://github.com/oisee/vibing-steampunk/pull/108) | dme007 | deploy session ordering, MODIFICATION_SUPPORT | **adopt** (decided 2026-08-03) | `1bc5804` shows SAP's `IF_ADT_LOCK_RESULT` documents `NoModification` as `CO_MOD_SUPPORT_NOT_NEEDED`, so the guard from `22517d4` was a false positive on customer-namespace objects. Also brings redirect header preservation and `ICMENOSESSION` recovery, which we lack. Merge pending — plan task 5. |
+| [#108](https://github.com/oisee/vibing-steampunk/pull/108) | dme007 | deploy session ordering, MODIFICATION_SUPPORT | **adopted** 2026-08-03 (`2d4fa5f`) | `1bc5804` shows SAP's `IF_ADT_LOCK_RESULT` documents `NoModification` as `CO_MOD_SUPPORT_NOT_NEEDED`, so the guard from `22517d4` was a false positive on customer-namespace objects. Also brings redirect header preservation and `ICMENOSESSION` recovery, which we lacked. Conflicts: comment-only in `workflows_deploy.go`; in `http.go` both sides kept (our CSRF `HEAD`→`GET` fallback from #120 plus their redirect handling). |
 | [#125](https://github.com/oisee/vibing-steampunk/pull/125) | dme007 | skip redundant mutation gate after lock | **superseded** by #108 | same subject area; #108 covers it |
 | [#139](https://github.com/oisee/vibing-steampunk/pull/139) | enricoandreoli | program includes as source-bearing objects | **pending** | collides with our #121 |
 | [#145](https://github.com/oisee/vibing-steampunk/pull/145) | zooloo303 | reuse an object's open transport instead of 409 | **pending** | adjacent to our write paths |
