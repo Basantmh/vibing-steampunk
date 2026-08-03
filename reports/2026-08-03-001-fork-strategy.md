@@ -158,6 +158,14 @@ git switch main && git merge --no-ff feat/<thema>
 den eigenen `main`, damit sie produktiv verfügbar ist. Bei einem stale Upstream
 wäre Warten gleichbedeutend mit Nichtstun.
 
+> **Nachtrag 2026-08-03, nach Umsetzung von Task 3:** Der obige Befehlsblock
+> merged direkt nach `main`. Das war richtig, solange keine CI auf Pull Requests
+> lief. Seit `.github/workflows/ci.yml` existiert, gehört **zusätzlich ein
+> fork-interner PR** dazu (`gh pr create --repo frd1201/vibing-steampunk --base main`),
+> weil er Build und Tests vor dem Merge durchlaufen lässt. Ein Head-Branch
+> bedient beide PRs. **`FORK.md` ist ab hier die maßgebliche Quelle für die
+> operativen Schritte** — dieser Report hält nur die Begründung fest.
+
 **Der PR-Branch wird nicht gelöscht, solange der PR offen ist** — ein gelöschter
 Head-Branch schließt den PR auf GitHub automatisch.
 
