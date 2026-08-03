@@ -182,6 +182,14 @@ Keep these branches alive until the PR is closed.
 All three are already merged into `main` here. If one stays unanswered for about
 twelve months, close it with a factual pointer to the fork commit.
 
+### Pending back-fill
+
+`4b80378` (corrNr at LOCK time) is **upstream-worthy** — it follows the SAP ADT
+API spec and helps anyone editing objects in transportable packages. It was
+developed on a fork-only branch before this operating model existed, so no PR
+exists. Back-fill it per the procedure above: branch off `upstream/main`,
+cherry-pick `4b80378`, open a PR. Until then it lives only in this fork.
+
 ---
 
 ## Upstream PR decisions
@@ -222,6 +230,12 @@ Relevant when syncing after upstream merges #120 or #121.
 |---|---|---|
 | `a47b225` | `2ea6004` | `feat/incl-write-support` |
 | `886a9b2` | `59b401b` | `fix/csrf-head-fallback-and-session-type` |
+
+`6b2cece` (the parked `fork-only/onprem-edit-fixes` branch) was adopted **in
+part only**: its corrNr work became `4b80378`, its configurable
+`MODIFICATION_SUPPORT` guard was dropped because upstream PR #108 removed the
+guard outright. The original commit no longer exists as a reachable SHA — the
+branch was deleted after the split.
 
 To re-audit what on `main` is not covered by any upstream PR, see section 9.1 of
 the strategy report.
