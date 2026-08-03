@@ -232,9 +232,26 @@ the strategy report.
 
 - The fork owns the **3.x** version band; upstream is on 2.x. If upstream ever
   tags a 3.x, switch to `v3.4.0-fork.1`.
-- Tags are cut from `main` only, and only when `go build ./...` and
-  `go test ./...` are green **and** an integration run against a real SAP system
-  has passed.
+- Tags are cut from `main` only, and only when the CI job on `main` is green
+  **and** an integration run against a real SAP system has passed.
+
+### Local test baseline
+
+`go test ./...` is **not** fully green on a Windows dev box without a C
+compiler. Measured 2026-08-03 on `main` at `4deea3b`, Go 1.26.5:
+
+| | |
+|---|---|
+| packages `ok` | 14 |
+| packages without tests | 4 |
+| packages failing | 2 — `cmd/vsp`, `pkg/cache` |
+| failing tests | 7, all `go-sqlite3 requires cgo to work` |
+
+`CGO_ENABLED` defaults to `0` when no C compiler is on `PATH`, which stubs out
+`go-sqlite3`. This is an environment limitation, not a defect. Local gate is
+therefore **"no new failures beyond these 7"**; the CI job on `ubuntu-latest`
+runs with cgo enabled and is the authoritative gate. Install MinGW/MSYS2 if you
+want the sqlite tests locally.
 - CHANGELOG keeps two sections per release: *Own changes* and *Adopted from
   upstream* (with PR number and author).
 
