@@ -26,7 +26,8 @@ type LockResult struct {
 // LockObject acquires an edit lock on an ABAP object.
 // objectURL is the ADT URL of the object (e.g., "/sap/bc/adt/programs/programs/ZTEST")
 // accessMode is typically "MODIFY" for editing
-func (c *Client) LockObject(ctx context.Context, objectURL string, accessMode string) (*LockResult, error) {
+// transport is the transport task number (corrNr / Aufgabe) — required for objects in transportable packages
+func (c *Client) LockObject(ctx context.Context, objectURL string, accessMode string, transport string) (*LockResult, error) {
 	// Safety check - only check for MODIFY locks, READ locks are safe
 	if accessMode == "" || accessMode == "MODIFY" {
 		if err := c.checkSafety(OpLock, "LockObject"); err != nil {
@@ -41,6 +42,9 @@ func (c *Client) LockObject(ctx context.Context, objectURL string, accessMode st
 	params := url.Values{}
 	params.Set("_action", "LOCK")
 	params.Set("accessMode", accessMode)
+	if transport != "" {
+		params.Set("corrNr", transport)
+	}
 
 	resp, err := c.transport.Request(ctx, objectURL, &RequestOptions{
 		Method:   http.MethodPost,
@@ -299,7 +303,7 @@ var objectTypes = map[CreatableObjectType]objectTypeInfo{
 // This function tries to acquire and immediately release such locks.
 func (c *Client) tryCleanupOrphanLock(ctx context.Context, objectURL string) {
 	// Try to acquire the lock - this may succeed if it's our own orphan lock
-	lock, err := c.LockObject(ctx, objectURL, "MODIFY")
+	lock, err := c.LockObject(ctx, objectURL, "MODIFY", "")
 	if err != nil {
 		// Lock acquisition failed - lock might be held by another user or doesn't exist
 		return
@@ -440,7 +444,7 @@ func (c *Client) cleanupPartialObject(ctx context.Context, objectURL, pkg, trans
 	// half-created object. If we cannot acquire a lock the cleanup
 	// stops here and we surface manual recovery steps; we never try
 	// to delete without a lock because that would 403 anyway.
-	lock, lockErr := c.LockObject(ctx, objectURL, "MODIFY")
+	lock, lockErr := c.LockObject(ctx, objectURL, "MODIFY", "")
 	if lockErr != nil {
 		pce.CleanupActions = append(pce.CleanupActions,
 			fmt.Sprintf("could not acquire lock for delete: %v", lockErr))
@@ -1207,7 +1211,7 @@ func (c *Client) CreateTable(ctx context.Context, opts CreateTableOptions) error
 	tableURL := fmt.Sprintf("/sap/bc/adt/ddic/tables/%s", strings.ToLower(opts.Name))
 	sourceURL := tableURL + "/source/main"
 
-	lock, err := c.LockObject(ctx, tableURL, "MODIFY")
+	lock, err := c.LockObject(ctx, tableURL, "MODIFY", "")
 	if err != nil {
 		return fmt.Errorf("locking table: %w", err)
 	}

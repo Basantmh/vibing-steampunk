@@ -60,7 +60,7 @@ func (c *Client) WriteProgram(ctx context.Context, programName string, source st
 	result.SyntaxErrors = syntaxErrors // Include warnings if any
 
 	// Step 2: Lock the object
-	lock, err := c.LockObject(ctx, objectURL, "MODIFY")
+	lock, err := c.LockObject(ctx, objectURL, "MODIFY", "")
 	if err != nil {
 		result.Message = fmt.Sprintf("Failed to lock object: %v", err)
 		return result, nil
@@ -150,7 +150,7 @@ func (c *Client) WriteInclude(ctx context.Context, includeName string, source st
 	}
 	result.SyntaxErrors = syntaxErrors
 
-	lock, err := c.LockObject(ctx, objectURL, "MODIFY")
+	lock, err := c.LockObject(ctx, objectURL, "MODIFY", "")
 	if err != nil {
 		result.Message = fmt.Sprintf("Failed to lock object: %v", err)
 		return result, nil
@@ -237,7 +237,7 @@ func (c *Client) WriteClass(ctx context.Context, className string, source string
 	result.SyntaxErrors = syntaxErrors
 
 	// Step 2: Lock
-	lock, err := c.LockObject(ctx, objectURL, "MODIFY")
+	lock, err := c.LockObject(ctx, objectURL, "MODIFY", "")
 	if err != nil {
 		result.Message = fmt.Sprintf("Failed to lock object: %v", err)
 		return result, nil
@@ -330,7 +330,7 @@ func (c *Client) CreateAndActivateProgram(ctx context.Context, programName strin
 	}
 
 	// Step 2: Lock
-	lock, err := c.LockObject(ctx, objectURL, "MODIFY")
+	lock, err := c.LockObject(ctx, objectURL, "MODIFY", "")
 	if err != nil {
 		result.Message = fmt.Sprintf("Failed to lock object: %v", err)
 		return result, nil
@@ -423,7 +423,7 @@ func (c *Client) CreateClassWithTests(ctx context.Context, className string, des
 	}
 
 	// Step 2: Lock
-	lock, err := c.LockObject(ctx, objectURL, "MODIFY")
+	lock, err := c.LockObject(ctx, objectURL, "MODIFY", "")
 	if err != nil {
 		result.Message = fmt.Sprintf("Failed to lock object: %v", err)
 		return result, nil

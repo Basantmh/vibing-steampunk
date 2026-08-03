@@ -33,10 +33,15 @@ type routedResponse struct {
 type recordedCall struct {
 	method string
 	path   string
+	query  string
 }
 
 func (m *methodPathMock) Do(req *http.Request) (*http.Response, error) {
-	m.calls = append(m.calls, recordedCall{method: req.Method, path: req.URL.Path})
+	m.calls = append(m.calls, recordedCall{
+		method: req.Method,
+		path:   req.URL.Path,
+		query:  req.URL.RawQuery,
+	})
 	for _, r := range m.routes {
 		if r.method != "" && r.method != req.Method {
 			continue
@@ -612,6 +617,7 @@ func TestLockObject_PassesThroughModificationSupport(t *testing.T) {
 				context.Background(),
 				"/sap/bc/adt/oo/classes/ZOBJ",
 				"MODIFY",
+				"",
 			)
 			if err != nil {
 				t.Fatalf("LockObject(MODIFY) must not fail on MODIFICATION_SUPPORT=%q, got error: %v", tc.support, err)
@@ -662,6 +668,7 @@ func TestLockObject_AllowsNoModificationOnReadLock(t *testing.T) {
 		context.Background(),
 		"/sap/bc/adt/oo/classes/ZREADONLY",
 		"READ",
+		"",
 	)
 	if err != nil {
 		t.Fatalf("LockObject(READ) should succeed even on read-only objects: %v", err)
@@ -671,3 +678,60 @@ func TestLockObject_AllowsNoModificationOnReadLock(t *testing.T) {
 	}
 }
 
+
+// TestLockObject_EmitsCorrNr pins the corrNr query parameter that on-premise
+// SAP systems expect when locking an object in a transportable package.
+// transport == "" must stay wire-level identical to the pre-4-arg behaviour,
+// so that the 22 non-write call sites keep behaving exactly as before.
+func TestLockObject_EmitsCorrNr(t *testing.T) {
+	tests := []struct {
+		name      string
+		transport string
+		wantCorr  bool
+	}{
+		{name: "transportable package", transport: "TR-EXAMPLE", wantCorr: true},
+		{name: "no transport", transport: "", wantCorr: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock := &methodPathMock{
+				routes: []routedResponse{
+					resp("", "discovery", 200, "ok"),
+					resp(http.MethodPost, "/oo/classes/ZCL_DEMO", 200, lockResponseXML),
+				},
+			}
+			cfg := NewConfig("https://sap.example.com:44300", "user", "pass")
+			client := NewClientWithTransport(cfg, NewTransportWithClient(cfg, mock))
+
+			_, err := client.LockObject(
+				context.Background(),
+				"/sap/bc/adt/oo/classes/ZCL_DEMO",
+				"MODIFY",
+				tt.transport,
+			)
+			if err != nil {
+				t.Fatalf("LockObject returned %v, want nil", err)
+			}
+
+			var lockQuery string
+			var seen bool
+			for _, c := range mock.calls {
+				if c.method == http.MethodPost && strings.Contains(c.path, "ZCL_DEMO") {
+					lockQuery, seen = c.query, true
+				}
+			}
+			if !seen {
+				t.Fatal("no LOCK request was recorded")
+			}
+
+			gotCorr := strings.Contains(lockQuery, "corrNr=TR-EXAMPLE")
+			if gotCorr != tt.wantCorr {
+				t.Errorf("query = %q, corrNr present = %v, want %v", lockQuery, gotCorr, tt.wantCorr)
+			}
+			if !tt.wantCorr && strings.Contains(lockQuery, "corrNr") {
+				t.Errorf("query = %q, must not emit corrNr when transport is empty", lockQuery)
+			}
+		})
+	}
+}
