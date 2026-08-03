@@ -182,6 +182,11 @@ Keep these branches alive until the PR is closed.
 All three are already merged into `main` here. If one stays unanswered for about
 twelve months, close it with a factual pointer to the fork commit.
 
+**Review dates:** module-path trigger check on **2026-10-15** (strategy report,
+section 7 — upstream's six-month code-commit clock started 2026-04-15).
+Close-if-unanswered dates: #120 and #121 on **2027-04-23**, #126 on
+**2027-05-01**.
+
 ### Pending back-fill
 
 `4b80378` (corrNr at LOCK time) is **upstream-worthy** — it follows the SAP ADT
