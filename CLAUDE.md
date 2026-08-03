@@ -2,7 +2,12 @@
 
 **vsp** — Go-native MCP server and CLI for SAP ABAP Development Tools (ADT).
 
-> **Doc intent:** CLAUDE.md = dev context. README.md = user onboarding. reports/ = research/history. contexts/ = session handoff.
+> **Doc intent:** CLAUDE.md = dev context. README.md = user onboarding. FORK.md = fork operations. reports/ = research/history. contexts/ = session handoff.
+
+> **This is a fork.** `frd1201/vibing-steampunk`, downstream of `oisee/vibing-steampunk`.
+> Before branching, merging, or touching `go.mod` / `.goreleaser.yml`, read [FORK.md](FORK.md).
+> Two rules that are easy to break by accident: upstream-worthy work branches off
+> `upstream/main` (not `main`), and never cherry-pick — always merge.
 
 ---
 
