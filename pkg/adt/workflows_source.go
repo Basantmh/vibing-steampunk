@@ -426,7 +426,7 @@ func (c *Client) writeSourceCreate(ctx context.Context, objectType, name, source
 		result.SyntaxErrors = syntaxErrors
 
 		// Lock
-		lock, err := c.LockObject(ctx, objectURL, "MODIFY")
+		lock, err := c.LockObject(ctx, objectURL, "MODIFY", "")
 		if err != nil {
 			result.Message = fmt.Sprintf("Failed to lock object: %v", err)
 			return result, nil
@@ -511,7 +511,7 @@ func (c *Client) writeSourceCreate(ctx context.Context, objectType, name, source
 			sourceURL := objectURL + "/source/main"
 
 			// Lock
-			lock, err := c.LockObject(ctx, objectURL, "MODIFY")
+			lock, err := c.LockObject(ctx, objectURL, "MODIFY", "")
 			if err != nil {
 				result.Message = fmt.Sprintf("Failed to lock BDEF: %v", err)
 				return result, nil
@@ -568,7 +568,7 @@ func (c *Client) writeSourceCreate(ctx context.Context, objectType, name, source
 		result.SyntaxErrors = syntaxErrors
 
 		// Lock
-		lock, err := c.LockObject(ctx, objectURL, "MODIFY")
+		lock, err := c.LockObject(ctx, objectURL, "MODIFY", "")
 		if err != nil {
 			result.Message = fmt.Sprintf("Failed to lock object: %v", err)
 			return result, nil
@@ -755,7 +755,7 @@ func (c *Client) writeSourceUpdate(ctx context.Context, objectType, name, source
 			objectURL := fmt.Sprintf("/sap/bc/adt/oo/classes/%s", url.PathEscape(name))
 
 			// Lock for test update
-			lock, err := c.LockObject(ctx, objectURL, "MODIFY")
+			lock, err := c.LockObject(ctx, objectURL, "MODIFY", "")
 			if err != nil {
 				result.Message += fmt.Sprintf(" (Warning: Failed to lock for test update: %v)", err)
 				return result, nil
@@ -819,7 +819,7 @@ func (c *Client) writeSourceUpdate(ctx context.Context, objectType, name, source
 		result.SyntaxErrors = syntaxErrors
 
 		// Lock
-		lock, err := c.LockObject(ctx, objectURL, "MODIFY")
+		lock, err := c.LockObject(ctx, objectURL, "MODIFY", "")
 		if err != nil {
 			result.Message = fmt.Sprintf("Failed to lock object: %v", err)
 			return result, nil
@@ -894,7 +894,7 @@ func (c *Client) writeSourceUpdate(ctx context.Context, objectType, name, source
 		result.SyntaxErrors = syntaxErrors
 
 		// Lock
-		lock, err := c.LockObject(ctx, objectURL, "MODIFY")
+		lock, err := c.LockObject(ctx, objectURL, "MODIFY", "")
 		if err != nil {
 			result.Message = fmt.Sprintf("Failed to lock object: %v", err)
 			return result, nil
@@ -1023,7 +1023,7 @@ func (c *Client) writeClassMethodUpdate(ctx context.Context, className, methodNa
 	result.SyntaxErrors = syntaxErrors
 
 	// Lock
-	lock, err := c.LockObject(ctx, objectURL, "MODIFY")
+	lock, err := c.LockObject(ctx, objectURL, "MODIFY", "")
 	if err != nil {
 		result.Message = fmt.Sprintf("Failed to lock class: %v", err)
 		return result, nil

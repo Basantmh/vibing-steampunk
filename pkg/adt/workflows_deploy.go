@@ -112,7 +112,7 @@ func (c *Client) CreateFromFile(ctx context.Context, filePath, packageName, tran
 
 	// 6. Lock object — from here on, ALL requests must be stateful to
 	// maintain session affinity for the lock handle (issue #88).
-	lockResult, err := c.LockObject(ctx, objectURL, "MODIFY")
+	lockResult, err := c.LockObject(ctx, objectURL, "MODIFY", transport)
 	if err != nil {
 		return &DeployResult{
 			FilePath:   filePath,
@@ -264,7 +264,7 @@ func (c *Client) UpdateFromFile(ctx context.Context, filePath, transport string)
 
 	// 5. Lock object — from here on, ALL requests must be stateful to
 	// maintain session affinity for the lock handle (issue #88).
-	lockResult, err := c.LockObject(ctx, objectURL, "MODIFY")
+	lockResult, err := c.LockObject(ctx, objectURL, "MODIFY", transport)
 	if err != nil {
 		return &DeployResult{
 			FilePath:   filePath,
