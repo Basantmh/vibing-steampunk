@@ -55,16 +55,21 @@ that is already on `main` — see below.
 | `probe/pr-<n>` | throwaway trial merge | `main` | deleted |
 
 **Never delete a `feat/*` or `fix/*` branch while its upstream PR is open** —
-GitHub auto-closes a pull request when its head branch disappears.
+GitHub auto-closes a pull request when its head branch disappears. Merging the
+fork-internal PR does *not* release the branch; only the upstream PR does.
+`fork-only/*` and `upstream-pr/*` branches have no upstream PR and are deleted
+as soon as they are merged.
 
-When merging a fork-internal PR on GitHub, always pick **"Create a merge
-commit"**. "Squash and merge" is a cherry-pick in disguise and breaks rule 2.
+When merging any PR on GitHub, always pick **"Create a merge commit"**.
+"Squash and merge" is a cherry-pick in disguise and breaks rule 2.
 
 ---
 
 ## Monthly upstream check
 
-Two minutes, once a month, or whenever GitHub reports activity upstream:
+`upstream/main` is a **fetch snapshot**, not a live mirror — it shows whatever
+the last `git fetch upstream` pulled down. That is the whole reason this check
+exists. Two minutes, once a month, or whenever GitHub reports activity upstream:
 
 ```bash
 git fetch upstream --prune
@@ -89,31 +94,47 @@ git branch -d sync/upstream-$(date +%Y-%m)
 One question decides the branch type: *does this solve a problem every user has,
 and is it free of site- or customer-specific detail?*
 
-**Yes — upstream-worthy:**
+### Yes — upstream-worthy: one branch, two PRs
 
 ```bash
 git fetch upstream
 git switch -c feat/<topic> upstream/main       # not off main!
 # ... develop, test ...
 git push -u origin feat/<topic>
+
+# PR 1 — into our own main. Runs the CI gate before the merge.
+gh pr create --repo frd1201/vibing-steampunk --base main
+
+# PR 2 — upstream. Same head branch, different base repo.
 gh pr create --repo oisee/vibing-steampunk --base main
-git switch main && git merge --no-ff feat/<topic>
 ```
 
-Do **not** wait for the upstream merge — the change goes into `main` right away
-so it is available in production here.
+One head branch serves both PRs; GitHub allows this because the bases differ.
+Merge PR 1 with **"Create a merge commit"** — never "Squash and merge", which
+is a cherry-pick in disguise and breaks rule 2.
 
-Review fixes requested on the upstream PR are pushed to the same branch and come
-back with **another** `git merge --no-ff feat/<topic>`. Never by copying the
-commit across.
+**Do not wait for the upstream merge.** The change goes into `main` as soon as
+PR 1 is green, so it is available here. Upstream may take months, or never.
 
-**No — fork-only:**
+**Do not delete the branch when GitHub offers to after merging PR 1.** That
+closes PR 2. Only the upstream PR governs a branch's lifetime — the
+fork-internal PR does not hold it.
+
+Review fixes requested upstream are pushed to the same branch: they show up in
+PR 2 automatically, and come back into `main` through **another**
+`git merge --no-ff feat/<topic>`. Never by copying the commit across.
+
+### No — fork-only: one branch, one PR
 
 ```bash
 git switch -c fork-only/<topic> main
 # ... develop, test ...
-git switch main && git merge --no-ff fork-only/<topic>
+git push -u origin fork-only/<topic>
+gh pr create --repo frd1201/vibing-steampunk --base main
 ```
+
+No upstream PR — site-specific work has no business there. Delete the branch
+right after the merge; nothing holds it.
 
 Then add a row to *Fork-only changes* below.
 
