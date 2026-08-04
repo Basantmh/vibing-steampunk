@@ -86,7 +86,7 @@ These tools replace 11 granular read/write operations with intelligent parameter
 
 ---
 
-## Development Tools (10 tools)
+## Development Tools (11 tools)
 
 | Tool | Description | Mode |
 |------|-------------|------|
@@ -99,7 +99,87 @@ These tools replace 11 granular read/write operations with intelligent parameter
 | `CloneObject` | Copy PROG/CLAS/INTF to new name | Focused |
 | `GetClassInfo` | Quick class metadata (methods, attrs, interfaces) | Focused |
 | `CreateTable` | Create DDIC table from JSON definition | Focused |
+| `CreateStructure` | Create classic DDIC structure (SE11) from JSON definition | Focused |
 | `CreatePackage` | Create local package ($...) | Focused |
+
+### CreateStructure
+
+Creates a classic DDIC structure (repository type `TABL`, ADT subtype `TABL/DS`) — **not** a database table. Workflow: create inactive structure → lock → write DDL source → unlock → activate (optional).
+
+**Parameters:**
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `name` | yes | Structure name (uppercase, max 30 chars). SAP rejects an underscore at the 2nd/3rd position (DT101): `ZS_TEST` invalid, `ZSTR_TEST` valid |
+| `description` | yes | Short description |
+| `package` | no | Target package (default: `$TMP`) |
+| `components` | yes | JSON array; each entry has `name` plus **either** `data_element` **or** `type` (+`length`/`decimals`) |
+| `transport` | no | Transport request (not needed for `$TMP`; requires `SAP_ALLOW_TRANSPORTABLE_EDITS`) |
+| `activate_after_create` | no | Default `true`; if `false` the structure is left inactive |
+
+**Example — local object ($TMP):**
+```json
+{
+  "name": "ZSTR_VSP_TEST",
+  "description": "VSP structure creation test",
+  "package": "$TMP",
+  "components": [
+    {"name": "BUKRS", "data_element": "BUKRS"},
+    {"name": "ANLN1", "data_element": "ANLN1"}
+  ],
+  "activate_after_create": true
+}
+```
+
+**Example — transportable package:**
+```json
+{
+  "name": "ZSTR_FI_ASSET",
+  "description": "Asset key fields",
+  "package": "ZFI",
+  "transport": "NPLK900042",
+  "components": [
+    {"name": "BUKRS", "data_element": "BUKRS"},
+    {"name": "ANLN1", "data_element": "ANLN1"}
+  ],
+  "activate_after_create": true
+}
+```
+
+**Component types:**
+
+A component is typed **either** by `data_element` (any existing DDIC data element) **or** by a predefined `type`. The two are mutually exclusive.
+
+| Type | Needs | DDL |
+|------|-------|-----|
+| `CHAR`, `NUMC`, `RAW` | `length` (max 30000 / 255 / 32000) | `abap.char(10)` |
+| `DEC` | `length` (1–31), `decimals` (0–14) | `abap.dec(15,2)` |
+| `INT1`, `INT2`, `INT4`, `INT8`, `FLTP` | — | `abap.int4` |
+| `DATS`, `TIMS`, `UTCLONG`, `CLNT`, `LANG` | — | `abap.dats` |
+| `STRING`, `RAWSTRING` | — | `abap.string(0)` |
+
+`CHAR32`/`NUMC10`/`RAW16` shorthand is accepted as an alternative to `type`+`length`.
+
+```json
+{
+  "name": "ZSTR_DOC_ITEM",
+  "description": "Document item",
+  "package": "$TMP",
+  "components": [
+    {"name": "BUKRS",  "data_element": "BUKRS"},
+    {"name": "AMOUNT", "type": "DEC", "length": 15, "decimals": 2},
+    {"name": "NOTE",   "type": "CHAR", "length": 40},
+    {"name": "SEQNO",  "type": "INT4"}
+  ],
+  "activate_after_create": true
+}
+```
+
+**Limitations & behavior:**
+- `CURR` and `QUAN` are **not** supported: DDIC requires a currency/unit reference annotation for them, which this API does not model yet. Use a data element (e.g. `WRBTR`, `MENGE`) instead.
+- Unknown type names are rejected outright rather than being passed through as a data-element reference, so a typo fails fast with a clear message instead of an opaque activation error.
+- Creation and activation status are reported separately; if activation fails, the structure exists but stays inactive and the activation messages are returned.
+- All safety controls apply (read-only mode, allowed operations `C`/`L`/`A`, package restrictions, transport restrictions, transportable-edit opt-in).
 
 ---
 

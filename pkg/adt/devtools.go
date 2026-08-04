@@ -122,9 +122,9 @@ func parseSyntaxCheckResults(data []byte) ([]SyntaxCheckResult, error) {
 
 // ActivationResult represents the result of an activation.
 type ActivationResult struct {
-	Success  bool                       `json:"success"`
-	Messages []ActivationResultMessage  `json:"messages"`
-	Inactive []InactiveObject           `json:"inactive,omitempty"`
+	Success  bool                      `json:"success"`
+	Messages []ActivationResultMessage `json:"messages"`
+	Inactive []InactiveObject          `json:"inactive,omitempty"`
 }
 
 // ActivationResultMessage represents a message from activation.
@@ -234,6 +234,21 @@ func parseActivationResult(data []byte) (*ActivationResult, error) {
 		return result, nil
 	}
 
+	// ADT commonly returns <chkl:messages> or <ioc:inactiveObjects> as the
+	// document ROOT rather than wrapped in a parent element. Unmarshal above
+	// only matches children of the root, so retry with the root itself as
+	// the messages/inactiveObjects element before concluding success.
+	if len(resp.Messages.Msgs) == 0 && len(resp.Inactive.Entries) == 0 {
+		var rootMsgs messages
+		if err := xml.Unmarshal(data, &rootMsgs); err == nil && len(rootMsgs.Msgs) > 0 {
+			resp.Messages = rootMsgs
+		}
+		var rootInactive inactiveObjects
+		if err := xml.Unmarshal(data, &rootInactive); err == nil && len(rootInactive.Entries) > 0 {
+			resp.Inactive = rootInactive
+		}
+	}
+
 	for _, m := range resp.Messages.Msgs {
 		result.Messages = append(result.Messages, ActivationResultMessage{
 			ObjDescr:       m.ObjDescr,
@@ -295,7 +310,7 @@ func parseInactiveObjects(data []byte) ([]InactiveObjectRecord, error) {
 		ParentURI string `xml:"parentUri,attr"`
 	}
 	type objectElement struct {
-		Deleted bool `xml:"deleted,attr"`
+		Deleted bool   `xml:"deleted,attr"`
 		User    string `xml:"user,attr"`
 		Ref     ref    `xml:"ref"`
 	}
@@ -708,13 +723,13 @@ func parseUnitTestResult(data []byte) (*UnitTestResult, error) {
 		} `xml:"stack"`
 	}
 	type testMethod struct {
-		URI           string `xml:"uri,attr"`
-		Type          string `xml:"type,attr"`
-		Name          string `xml:"name,attr"`
+		URI           string  `xml:"uri,attr"`
+		Type          string  `xml:"type,attr"`
+		Name          string  `xml:"name,attr"`
 		ExecutionTime float64 `xml:"executionTime,attr"`
-		URIType       string `xml:"uriType,attr"`
-		NavigationURI string `xml:"navigationUri,attr"`
-		Unit          string `xml:"unit,attr"`
+		URIType       string  `xml:"uriType,attr"`
+		NavigationURI string  `xml:"navigationUri,attr"`
+		Unit          string  `xml:"unit,attr"`
 		Alerts        struct {
 			Items []alert `xml:"alert"`
 		} `xml:"alerts"`
@@ -735,9 +750,9 @@ func parseUnitTestResult(data []byte) (*UnitTestResult, error) {
 		} `xml:"alerts"`
 	}
 	type program struct {
-		URI  string `xml:"uri,attr"`
-		Type string `xml:"type,attr"`
-		Name string `xml:"name,attr"`
+		URI         string `xml:"uri,attr"`
+		Type        string `xml:"type,attr"`
+		Name        string `xml:"name,attr"`
 		TestClasses struct {
 			Items []testClass `xml:"testClass"`
 		} `xml:"testClasses"`
