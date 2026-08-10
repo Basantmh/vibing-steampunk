@@ -25,7 +25,7 @@ Single binary, zero dependencies beyond Go 1.23+.
 **What to spotlight:**
 - Two modes: MCP Server (AI agents) + CLI (terminal DevOps)
 - 28 CLI commands, 81–122 MCP tools
-- Enterprise safety flags (`--read-only`, `--allowed-packages`, `--disallowed-ops`)
+- Enterprise safety flags (`--read-only`, `--allowed-packages`, `--allowed-read-packages`, `--disallowed-ops`)
 - Subcommands: search, source, query, grep, graph, deps, lint, compile, parse, test, atc, deploy, export, system, install...
 
 **Questions:**

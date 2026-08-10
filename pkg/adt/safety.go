@@ -37,10 +37,15 @@ type SafetyConfig struct {
 	// Example: "CDUA" = block create, delete, update, activate
 	DisallowedOps string
 
-	// AllowedPackages restricts operations to specific packages (empty = all packages allowed)
+	// AllowedPackages restricts write operations to specific packages (empty = all packages allowed)
 	// Example: []string{"$TMP", "ZTEST", "Z*"} - only allow local and test packages
 	// Supports wildcards: "Z*" matches all packages starting with Z
 	AllowedPackages []string
+
+	// AllowedReadPackages restricts read operations to specific packages (empty = all packages allowed)
+	// Example: []string{"Z*", "$TMP"} - limit AI reads to custom/local packages only
+	// Supports wildcards: "Z*" matches all packages starting with Z
+	AllowedReadPackages []string
 
 	// DryRun mode - log operations but don't execute them (useful for testing)
 	DryRun bool
@@ -201,6 +206,41 @@ func (s *SafetyConfig) CheckPackage(pkg string) error {
 	if !s.IsPackageAllowed(pkg) {
 		return fmt.Errorf("operations on package '%s' are blocked by safety configuration (allowed: %v)",
 			pkg, s.AllowedPackages)
+	}
+	return nil
+}
+
+// IsReadPackageAllowed checks if reading from a given package is allowed
+func (s *SafetyConfig) IsReadPackageAllowed(pkg string) bool {
+	if len(s.AllowedReadPackages) == 0 {
+		return true
+	}
+
+	pkg = strings.ToUpper(pkg)
+
+	for _, allowed := range s.AllowedReadPackages {
+		allowed = strings.ToUpper(allowed)
+
+		if allowed == pkg {
+			return true
+		}
+
+		if strings.HasSuffix(allowed, "*") {
+			prefix := strings.TrimSuffix(allowed, "*")
+			if strings.HasPrefix(pkg, prefix) {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+// CheckReadPackage returns an error if reading from the package is not allowed
+func (s *SafetyConfig) CheckReadPackage(pkg string) error {
+	if !s.IsReadPackageAllowed(pkg) {
+		return fmt.Errorf("reading from package '%s' is blocked by safety configuration (allowed: %v)",
+			pkg, s.AllowedReadPackages)
 	}
 	return nil
 }
@@ -367,6 +407,10 @@ func (s *SafetyConfig) String() string {
 
 	if len(s.AllowedPackages) > 0 {
 		parts = append(parts, fmt.Sprintf("AllowedPackages=%v", s.AllowedPackages))
+	}
+
+	if len(s.AllowedReadPackages) > 0 {
+		parts = append(parts, fmt.Sprintf("AllowedReadPackages=%v", s.AllowedReadPackages))
 	}
 
 	if s.EnableTransports {

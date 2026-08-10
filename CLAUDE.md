@@ -33,7 +33,7 @@ go test -tags=integration -v ./pkg/adt/ # Integration (needs SAP)
 make build-all                          # 9 platforms
 ```
 
-Key flags: `--mode focused|expert|hyperfocused`, `--read-only`, `--allowed-packages "Z*"`, `--disabled-groups 5THD`
+Key flags: `--mode focused|expert|hyperfocused`, `--read-only`, `--allowed-packages "Z*"`, `--allowed-read-packages "Z*"`, `--disabled-groups 5THD`
 
 ---
 

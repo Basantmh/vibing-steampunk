@@ -273,7 +273,8 @@ AMDP, transport management).
 |----------|--------------|
 | **Q/A / Code Review** | `SAP_READ_ONLY=true` -- blocks all write operations |
 | **SQL Analysis** | `SAP_ALLOWED_OPS=RSQ` -- read + search + query only |
-| **Development (restricted)** | `SAP_ALLOWED_PACKAGES=Z*,$TMP` -- restrict to custom packages |
+| **Development (restricted writes)** | `SAP_ALLOWED_PACKAGES=Z*,$TMP` -- restrict writes to custom packages |
+| **Legal read restriction** | `SAP_ALLOWED_READ_PACKAGES=Z*,$TMP` -- restrict reads to custom/local packages |
 | **Full testing** | `SAP_BLOCK_FREE_SQL=true` -- allow writes but block arbitrary SQL |
 | **Production system** | `SAP_READ_ONLY=true` always -- never allow writes to production |
 
@@ -284,6 +285,7 @@ AMDP, transport management).
 SAP_READ_ONLY = "true"
 SAP_BLOCK_FREE_SQL = "true"
 SAP_ALLOWED_PACKAGES = "Z*,$TMP"
+SAP_ALLOWED_READ_PACKAGES = "Z*,$TMP"
 SAP_ALLOW_TRANSPORTABLE_EDITS = "false"
 ```
 

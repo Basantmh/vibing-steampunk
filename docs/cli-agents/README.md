@@ -220,7 +220,7 @@ SAP_MODE = "focused"
 
 > **Note:** `codex.toml` contains credentials — add it to `.gitignore`. Project-local vs `~/.codex/config.toml` scope depends on your Codex version.
 
-> **Safety tip:** Use `SAP_READ_ONLY=true` for Q/A testing, or `SAP_ALLOWED_OPS=RSQ` to allow read + search + query only. See [codex.md](codex.md) for full safety options.
+> **Safety tip:** Use `SAP_READ_ONLY=true` for Q/A testing, `SAP_ALLOWED_OPS=RSQ` to allow read + search + query only, or `SAP_ALLOWED_READ_PACKAGES=Z*` to restrict reads to specific packages. See [codex.md](codex.md) for full safety options.
 
 ### Links
 - GitHub: https://github.com/openai/codex

@@ -174,6 +174,10 @@ func (s *Server) handleGetSource(ctx context.Context, request mcp.CallToolReques
 		Method:  method,
 	}
 
+	if err := s.checkReadPackageByName(ctx, name); err != nil {
+		return newToolResultError(fmt.Sprintf("Read blocked by package restriction: %v", err)), nil
+	}
+
 	source, err := s.adtClient.GetSource(ctx, objectType, name, opts)
 	if err != nil {
 		return newToolResultError(fmt.Sprintf("GetSource failed: %v", err)), nil
@@ -373,6 +377,19 @@ func (s *Server) handleGrepObjects(ctx context.Context, request mcp.CallToolRequ
 		contextLines = int(cl)
 	}
 
+	if s.adtClient.HasReadPackageRestriction() {
+		allowed := objectURLs[:0]
+		for _, u := range objectURLs {
+			if s.checkReadPackage(ctx, u) == nil {
+				allowed = append(allowed, u)
+			}
+		}
+		objectURLs = allowed
+	}
+	if len(objectURLs) == 0 {
+		return mcp.NewToolResultText("[]"), nil
+	}
+
 	result, err := s.adtClient.GrepObjects(ctx, objectURLs, pattern, caseInsensitive, contextLines)
 	if err != nil {
 		return newToolResultError(fmt.Sprintf("GrepObjects failed: %v", err)), nil
@@ -427,6 +444,19 @@ func (s *Server) handleGrepPackages(ctx context.Context, request mcp.CallToolReq
 	maxResults := 0
 	if mr, ok := request.GetArguments()["max_results"].(float64); ok {
 		maxResults = int(mr)
+	}
+
+	if s.adtClient.HasReadPackageRestriction() {
+		allowed := packages[:0]
+		for _, pkg := range packages {
+			if s.adtClient.CheckReadPackage(pkg) == nil {
+				allowed = append(allowed, pkg)
+			}
+		}
+		packages = allowed
+	}
+	if len(packages) == 0 {
+		return mcp.NewToolResultText("[]"), nil
 	}
 
 	result, err := s.adtClient.GrepPackages(ctx, packages, includeSubpackages, pattern, caseInsensitive, objectTypes, maxResults)

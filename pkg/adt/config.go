@@ -136,6 +136,13 @@ func WithAllowedPackages(packages ...string) Option {
 	}
 }
 
+// WithAllowedReadPackages restricts read operations to specific packages.
+func WithAllowedReadPackages(packages ...string) Option {
+	return func(c *Config) {
+		c.Safety.AllowedReadPackages = packages
+	}
+}
+
 // WithEnableTransports enables transport management operations.
 // By default, transport operations are disabled - this flag explicitly enables them.
 func WithEnableTransports() Option {

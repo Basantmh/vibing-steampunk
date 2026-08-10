@@ -63,6 +63,10 @@ func (s *Server) handleGrepObject(ctx context.Context, request mcp.CallToolReque
 		contextLines = int(cl)
 	}
 
+	if err := s.checkReadPackage(ctx, objectURL); err != nil {
+		return newToolResultError(fmt.Sprintf("Read blocked by package restriction: %v", err)), nil
+	}
+
 	result, err := s.adtClient.GrepObject(ctx, objectURL, pattern, caseInsensitive, contextLines)
 	if err != nil {
 		return newToolResultError(fmt.Sprintf("GrepObject failed: %v", err)), nil
@@ -101,6 +105,10 @@ func (s *Server) handleGrepPackage(ctx context.Context, request mcp.CallToolRequ
 	maxResults := 100 // default
 	if mr, ok := request.GetArguments()["max_results"].(float64); ok {
 		maxResults = int(mr)
+	}
+
+	if err := s.adtClient.CheckReadPackage(packageName); err != nil {
+		return newToolResultError(fmt.Sprintf("Read blocked by package restriction: %v", err)), nil
 	}
 
 	result, err := s.adtClient.GrepPackage(ctx, packageName, pattern, caseInsensitive, objectTypes, maxResults)

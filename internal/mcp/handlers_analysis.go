@@ -80,6 +80,10 @@ func (s *Server) handleGetCallGraph(ctx context.Context, request mcp.CallToolReq
 		opts.MaxResults = int(max)
 	}
 
+	if err := s.checkReadPackage(ctx, objectURI); err != nil {
+		return newToolResultError(fmt.Sprintf("Read blocked by package restriction: %v", err)), nil
+	}
+
 	graph, err := s.adtClient.GetCallGraph(ctx, objectURI, opts)
 	if err != nil {
 		return newToolResultError(fmt.Sprintf("Failed to get call graph: %v", err)), nil
@@ -100,6 +104,10 @@ func (s *Server) handleGetObjectStructure(ctx context.Context, request mcp.CallT
 		maxResults = int(max)
 	}
 
+	if err := s.checkReadPackageByName(ctx, objectName); err != nil {
+		return newToolResultError(fmt.Sprintf("Read blocked by package restriction: %v", err)), nil
+	}
+
 	structure, err := s.adtClient.GetObjectStructureCAI(ctx, objectName, maxResults)
 	if err != nil {
 		return newToolResultError(fmt.Sprintf("Failed to get object structure: %v", err)), nil
@@ -118,6 +126,10 @@ func (s *Server) handleGetCallersOf(ctx context.Context, request mcp.CallToolReq
 	maxDepth := 5
 	if depth, ok := request.GetArguments()["max_depth"].(float64); ok && depth > 0 {
 		maxDepth = int(depth)
+	}
+
+	if err := s.checkReadPackage(ctx, objectURI); err != nil {
+		return newToolResultError(fmt.Sprintf("Read blocked by package restriction: %v", err)), nil
 	}
 
 	graph, err := s.adtClient.GetCallersOf(ctx, objectURI, maxDepth)
@@ -148,6 +160,10 @@ func (s *Server) handleGetCalleesOf(ctx context.Context, request mcp.CallToolReq
 	maxDepth := 5
 	if depth, ok := request.GetArguments()["max_depth"].(float64); ok && depth > 0 {
 		maxDepth = int(depth)
+	}
+
+	if err := s.checkReadPackage(ctx, objectURI); err != nil {
+		return newToolResultError(fmt.Sprintf("Read blocked by package restriction: %v", err)), nil
 	}
 
 	graph, err := s.adtClient.GetCalleesOf(ctx, objectURI, maxDepth)
@@ -183,6 +199,10 @@ func (s *Server) handleAnalyzeCallGraph(ctx context.Context, request mcp.CallToo
 	maxDepth := 5
 	if depth, ok := request.GetArguments()["max_depth"].(float64); ok && depth > 0 {
 		maxDepth = int(depth)
+	}
+
+	if err := s.checkReadPackage(ctx, objectURI); err != nil {
+		return newToolResultError(fmt.Sprintf("Read blocked by package restriction: %v", err)), nil
 	}
 
 	graph, err := s.adtClient.GetCallGraph(ctx, objectURI, &adt.CallGraphOptions{
@@ -224,6 +244,10 @@ func (s *Server) handleCompareCallGraphs(ctx context.Context, request mcp.CallTo
 	var actualEdges []adt.CallGraphEdge
 	if err := json.Unmarshal([]byte(traceDataStr), &actualEdges); err != nil {
 		return newToolResultError(fmt.Sprintf("Failed to parse trace_data: %v", err)), nil
+	}
+
+	if err := s.checkReadPackage(ctx, objectURI); err != nil {
+		return newToolResultError(fmt.Sprintf("Read blocked by package restriction: %v", err)), nil
 	}
 
 	// Get static call graph

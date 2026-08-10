@@ -54,6 +54,8 @@ func (s *Server) handleSearchObject(ctx context.Context, request mcp.CallToolReq
 		return newToolResultError(fmt.Sprintf("Failed to search: %v", err)), nil
 	}
 
+	results = s.filterSearchResultsByReadPackage(results)
+
 	output, _ := json.MarshalIndent(results, "", "  ")
 	return mcp.NewToolResultText(string(output)), nil
 }

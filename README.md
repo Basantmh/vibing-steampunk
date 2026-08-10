@@ -113,7 +113,7 @@ SAP(action="help",   target="debug")
 | MCP schema tokens | ~14,000 | ~40,000 | **~200** |
 | Reduction | — | — | **99.5%** |
 
-All safety controls (`--read-only`, `--allowed-ops`, `--allowed-packages`) work identically — the universal tool routes through the same handler → ADT client → `checkSafety()` chain.
+All safety controls (`--read-only`, `--allowed-ops`, `--allowed-packages`, `--allowed-read-packages`) work identically — the universal tool routes through the same handler → ADT client → `checkSafety()` chain.
 
 > *Thanks to [Filipp Gnilyak](https://github.com/nickel-f) for the hyperfocused mode concept.*
 
@@ -546,7 +546,8 @@ SAP_PASSWORD=secret
 | `--terminal-id` | `SAP_TERMINAL_ID` | SAP GUI terminal ID for cross-tool debugging |
 | `--allow-transportable-edits` | `SAP_ALLOW_TRANSPORTABLE_EDITS` | Enable editing transportable objects |
 | `--allowed-transports` | `SAP_ALLOWED_TRANSPORTS` | Whitelist transports (wildcards: `A4HK*`) |
-| `--allowed-packages` | `SAP_ALLOWED_PACKAGES` | Whitelist packages (wildcards: `Z*,$TMP`) |
+| `--allowed-packages` | `SAP_ALLOWED_PACKAGES` | Whitelist packages for write operations (wildcards: `Z*,$TMP`) |
+| `--allowed-read-packages` | `SAP_ALLOWED_READ_PACKAGES` | Whitelist packages for read operations (wildcards: `Z*,$TMP`) |
 
 </details>
 

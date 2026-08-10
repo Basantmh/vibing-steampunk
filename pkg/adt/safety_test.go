@@ -224,6 +224,83 @@ func TestSafetyConfig_CheckPackage(t *testing.T) {
 	}
 }
 
+func TestSafetyConfig_IsReadPackageAllowed(t *testing.T) {
+	tests := []struct {
+		name     string
+		config   SafetyConfig
+		pkg      string
+		expected bool
+	}{
+		{
+			name:     "Empty AllowedReadPackages allows all",
+			config:   SafetyConfig{},
+			pkg:      "ZANY",
+			expected: true,
+		},
+		{
+			name:     "Exact match",
+			config:   SafetyConfig{AllowedReadPackages: []string{"$TMP", "ZTEST"}},
+			pkg:      "$TMP",
+			expected: true,
+		},
+		{
+			name:     "Not in whitelist",
+			config:   SafetyConfig{AllowedReadPackages: []string{"$TMP", "ZTEST"}},
+			pkg:      "ZPROD",
+			expected: false,
+		},
+		{
+			name:     "Wildcard match - Z*",
+			config:   SafetyConfig{AllowedReadPackages: []string{"Z*"}},
+			pkg:      "ZTEST",
+			expected: true,
+		},
+		{
+			name:     "Wildcard match - $*",
+			config:   SafetyConfig{AllowedReadPackages: []string{"$*"}},
+			pkg:      "$TMP",
+			expected: true,
+		},
+		{
+			name:     "Wildcard no match",
+			config:   SafetyConfig{AllowedReadPackages: []string{"Z*"}},
+			pkg:      "$TMP",
+			expected: false,
+		},
+		{
+			name:     "Case insensitive",
+			config:   SafetyConfig{AllowedReadPackages: []string{"ztest"}},
+			pkg:      "ZTEST",
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := tt.config.IsReadPackageAllowed(tt.pkg)
+			if result != tt.expected {
+				t.Errorf("IsReadPackageAllowed(%s) = %v, expected %v", tt.pkg, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestSafetyConfig_CheckReadPackage(t *testing.T) {
+	config := SafetyConfig{AllowedReadPackages: []string{"$TMP", "Z*"}}
+
+	if err := config.CheckReadPackage("$TMP"); err != nil {
+		t.Errorf("CheckReadPackage($TMP) should not error, got: %v", err)
+	}
+
+	if err := config.CheckReadPackage("ZTEST"); err != nil {
+		t.Errorf("CheckReadPackage(ZTEST) should not error, got: %v", err)
+	}
+
+	if err := config.CheckReadPackage("PROD"); err == nil {
+		t.Error("CheckReadPackage(PROD) should error")
+	}
+}
+
 func TestSafetyConfig_String(t *testing.T) {
 	tests := []struct {
 		name     string

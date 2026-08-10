@@ -69,7 +69,8 @@ type Config struct {
 	BlockFreeSQL     bool
 	AllowedOps       string
 	DisallowedOps    string
-	AllowedPackages  []string
+	AllowedPackages     []string
+	AllowedReadPackages []string // Restrict MCP reads to specific packages (supports wildcards like Z*)
 	EnableTransports        bool     // Explicitly enable transport management (default: disabled)
 	TransportReadOnly       bool     // Only allow read operations on transports (list, get)
 	AllowedTransports       []string // Whitelist specific transports (supports wildcards like "A4HK*")
@@ -146,6 +147,9 @@ func NewServer(cfg *Config) *Server {
 	}
 	if len(cfg.AllowedPackages) > 0 {
 		safety.AllowedPackages = cfg.AllowedPackages
+	}
+	if len(cfg.AllowedReadPackages) > 0 {
+		safety.AllowedReadPackages = cfg.AllowedReadPackages
 	}
 	if cfg.EnableTransports {
 		safety.EnableTransports = true
@@ -244,6 +248,53 @@ func newToolResultError(message string) *mcp.CallToolResult {
 	result := mcp.NewToolResultText(message)
 	result.IsError = true
 	return result
+}
+
+// checkReadPackage resolves the SAP package for objectURL and returns an error
+// if AllowedReadPackages is configured and the package is not allowed.
+func (s *Server) checkReadPackage(ctx context.Context, objectURL string) error {
+	if !s.adtClient.HasReadPackageRestriction() {
+		return nil
+	}
+	pkg, err := s.adtClient.GetObjectPackage(ctx, objectURL)
+	if err != nil {
+		return fmt.Errorf("resolving package for read access check: %w", err)
+	}
+	return s.adtClient.CheckReadPackage(pkg)
+}
+
+// checkReadPackageByName resolves the SAP package via SearchObject from a plain object name
+// and returns an error if AllowedReadPackages is configured and the package is not allowed.
+func (s *Server) checkReadPackageByName(ctx context.Context, name string) error {
+	if !s.adtClient.HasReadPackageRestriction() {
+		return nil
+	}
+	results, err := s.adtClient.SearchObject(ctx, name, 20)
+	if err != nil {
+		return fmt.Errorf("resolving package for read access check: %w", err)
+	}
+	upper := strings.ToUpper(name)
+	for _, r := range results {
+		if strings.ToUpper(r.Name) == upper && r.PackageName != "" {
+			return s.adtClient.CheckReadPackage(r.PackageName)
+		}
+	}
+	return nil // object not found in search — no restriction applied
+}
+
+// filterSearchResultsByReadPackage removes results whose package is not in AllowedReadPackages.
+// When AllowedReadPackages is empty, the input slice is returned unchanged.
+func (s *Server) filterSearchResultsByReadPackage(results []adt.SearchResult) []adt.SearchResult {
+	if !s.adtClient.HasReadPackageRestriction() {
+		return results
+	}
+	filtered := results[:0]
+	for _, r := range results {
+		if s.adtClient.CheckReadPackage(r.PackageName) == nil {
+			filtered = append(filtered, r)
+		}
+	}
+	return filtered
 }
 
 // ensureWSConnected ensures the WebSocket client is connected, creating it if needed.

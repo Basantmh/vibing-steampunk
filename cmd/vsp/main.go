@@ -53,7 +53,8 @@ Quick start:
 
   # 3. Enterprise safety (hand to AI without fear)
   vsp --read-only                                    # no writes at all
-  vsp --allowed-packages 'Z*,$TMP' --block-free-sql  # sandbox AI to custom code
+  vsp --allowed-packages 'Z*,$TMP' --block-free-sql   # sandbox AI writes to custom code
+  vsp --allowed-read-packages 'Z*,$TMP'               # restrict AI reads to custom/local packages
   vsp --disallowed-ops CDUA                           # block create/delete/update/activate
 
 Configuration files:
@@ -127,7 +128,8 @@ func init() {
 	rootCmd.Flags().BoolVar(&cfg.BlockFreeSQL, "block-free-sql", false, "Block execution of arbitrary SQL queries via RunQuery")
 	rootCmd.Flags().StringVar(&cfg.AllowedOps, "allowed-ops", "", "Whitelist of allowed operation types (e.g., \"RSQ\" for Read, Search, Query only)")
 	rootCmd.Flags().StringVar(&cfg.DisallowedOps, "disallowed-ops", "", "Blacklist of operation types to block (e.g., \"CDUA\" for Create, Delete, Update, Activate)")
-	rootCmd.Flags().StringSliceVar(&cfg.AllowedPackages, "allowed-packages", nil, "Restrict operations to specific packages (comma-separated, supports wildcards like Z*)")
+	rootCmd.Flags().StringSliceVar(&cfg.AllowedPackages, "allowed-packages", nil, "Restrict write operations to specific packages (comma-separated, supports wildcards like Z*)")
+	rootCmd.Flags().StringSliceVar(&cfg.AllowedReadPackages, "allowed-read-packages", nil, "Restrict read operations to specific packages (comma-separated, supports wildcards like Z*)")
 	rootCmd.Flags().BoolVar(&cfg.EnableTransports, "enable-transports", false, "Enable transport management operations (disabled by default for safety)")
 	rootCmd.Flags().BoolVar(&cfg.TransportReadOnly, "transport-read-only", false, "Only allow read operations on transports (list, get)")
 	rootCmd.Flags().StringSliceVar(&cfg.AllowedTransports, "allowed-transports", nil, "Restrict transport operations to specific transports (comma-separated, supports wildcards like A4HK*)")
@@ -179,6 +181,7 @@ func init() {
 	viper.BindPFlag("allowed-ops", rootCmd.Flags().Lookup("allowed-ops"))
 	viper.BindPFlag("disallowed-ops", rootCmd.Flags().Lookup("disallowed-ops"))
 	viper.BindPFlag("allowed-packages", rootCmd.Flags().Lookup("allowed-packages"))
+	viper.BindPFlag("allowed-read-packages", rootCmd.Flags().Lookup("allowed-read-packages"))
 	viper.BindPFlag("enable-transports", rootCmd.Flags().Lookup("enable-transports"))
 	viper.BindPFlag("transport-read-only", rootCmd.Flags().Lookup("transport-read-only"))
 	viper.BindPFlag("allowed-transports", rootCmd.Flags().Lookup("allowed-transports"))
@@ -259,7 +262,10 @@ func runServer(cmd *cobra.Command, args []string) error {
 			fmt.Fprintf(os.Stderr, "[VERBOSE] Safety: Disallowed operations: %s\n", cfg.DisallowedOps)
 		}
 		if len(cfg.AllowedPackages) > 0 {
-			fmt.Fprintf(os.Stderr, "[VERBOSE] Safety: Allowed packages: %v\n", cfg.AllowedPackages)
+			fmt.Fprintf(os.Stderr, "[VERBOSE] Safety: Allowed write packages: %v\n", cfg.AllowedPackages)
+		}
+		if len(cfg.AllowedReadPackages) > 0 {
+			fmt.Fprintf(os.Stderr, "[VERBOSE] Safety: Allowed read packages: %v\n", cfg.AllowedReadPackages)
 		}
 		if cfg.EnableTransports {
 			fmt.Fprintf(os.Stderr, "[VERBOSE] Safety: Transport management ENABLED\n")
@@ -267,7 +273,7 @@ func runServer(cmd *cobra.Command, args []string) error {
 		if cfg.AllowTransportableEdits {
 			fmt.Fprintf(os.Stderr, "[VERBOSE] Safety: Transportable edits ENABLED (can modify non-local objects)\n")
 		}
-		if !cfg.ReadOnly && !cfg.BlockFreeSQL && cfg.AllowedOps == "" && cfg.DisallowedOps == "" && len(cfg.AllowedPackages) == 0 {
+		if !cfg.ReadOnly && !cfg.BlockFreeSQL && cfg.AllowedOps == "" && cfg.DisallowedOps == "" && len(cfg.AllowedPackages) == 0 && len(cfg.AllowedReadPackages) == 0 {
 			fmt.Fprintf(os.Stderr, "[VERBOSE] Safety: UNRESTRICTED (no safety checks active)\n")
 		}
 		if cfg.KeepAliveInterval > 0 {
@@ -407,6 +413,11 @@ func resolveConfig(cmd *cobra.Command) {
 		// Use GetString and split manually - GetStringSlice doesn't split comma-separated env vars
 		if pkgStr := viper.GetString("ALLOWED_PACKAGES"); pkgStr != "" {
 			cfg.AllowedPackages = splitCommaSeparated(pkgStr)
+		}
+	}
+	if !cmd.Flags().Changed("allowed-read-packages") {
+		if pkgStr := viper.GetString("ALLOWED_READ_PACKAGES"); pkgStr != "" {
+			cfg.AllowedReadPackages = splitCommaSeparated(pkgStr)
 		}
 	}
 	if !cmd.Flags().Changed("enable-transports") {

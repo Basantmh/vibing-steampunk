@@ -116,6 +116,10 @@ func (s *Server) handleGetProgram(ctx context.Context, request mcp.CallToolReque
 		return newToolResultError("program_name is required"), nil
 	}
 
+	if err := s.checkReadPackageByName(ctx, programName); err != nil {
+		return newToolResultError(fmt.Sprintf("Read blocked by package restriction: %v", err)), nil
+	}
+
 	source, err := s.adtClient.GetProgram(ctx, programName)
 	if err != nil {
 		return newToolResultError(fmt.Sprintf("Failed to get program: %v", err)), nil
@@ -130,6 +134,10 @@ func (s *Server) handleGetClass(ctx context.Context, request mcp.CallToolRequest
 		return newToolResultError("class_name is required"), nil
 	}
 
+	if err := s.checkReadPackageByName(ctx, className); err != nil {
+		return newToolResultError(fmt.Sprintf("Read blocked by package restriction: %v", err)), nil
+	}
+
 	source, err := s.adtClient.GetClassSource(ctx, className)
 	if err != nil {
 		return newToolResultError(fmt.Sprintf("Failed to get class: %v", err)), nil
@@ -142,6 +150,10 @@ func (s *Server) handleGetInterface(ctx context.Context, request mcp.CallToolReq
 	interfaceName, ok := request.GetArguments()["interface_name"].(string)
 	if !ok || interfaceName == "" {
 		return newToolResultError("interface_name is required"), nil
+	}
+
+	if err := s.checkReadPackageByName(ctx, interfaceName); err != nil {
+		return newToolResultError(fmt.Sprintf("Read blocked by package restriction: %v", err)), nil
 	}
 
 	source, err := s.adtClient.GetInterface(ctx, interfaceName)
@@ -163,6 +175,10 @@ func (s *Server) handleGetFunction(ctx context.Context, request mcp.CallToolRequ
 		return newToolResultError("function_group is required"), nil
 	}
 
+	if err := s.checkReadPackageByName(ctx, functionGroup); err != nil {
+		return newToolResultError(fmt.Sprintf("Read blocked by package restriction: %v", err)), nil
+	}
+
 	source, err := s.adtClient.GetFunction(ctx, functionName, functionGroup)
 	if err != nil {
 		return newToolResultError(fmt.Sprintf("Failed to get function: %v", err)), nil
@@ -175,6 +191,10 @@ func (s *Server) handleGetFunctionGroup(ctx context.Context, request mcp.CallToo
 	groupName, ok := request.GetArguments()["function_group"].(string)
 	if !ok || groupName == "" {
 		return newToolResultError("function_group is required"), nil
+	}
+
+	if err := s.checkReadPackageByName(ctx, groupName); err != nil {
+		return newToolResultError(fmt.Sprintf("Read blocked by package restriction: %v", err)), nil
 	}
 
 	fg, err := s.adtClient.GetFunctionGroup(ctx, groupName)
@@ -192,6 +212,10 @@ func (s *Server) handleGetInclude(ctx context.Context, request mcp.CallToolReque
 		return newToolResultError("include_name is required"), nil
 	}
 
+	if err := s.checkReadPackageByName(ctx, includeName); err != nil {
+		return newToolResultError(fmt.Sprintf("Read blocked by package restriction: %v", err)), nil
+	}
+
 	source, err := s.adtClient.GetInclude(ctx, includeName)
 	if err != nil {
 		return newToolResultError(fmt.Sprintf("Failed to get include: %v", err)), nil
@@ -204,6 +228,10 @@ func (s *Server) handleGetTable(ctx context.Context, request mcp.CallToolRequest
 	tableName, ok := request.GetArguments()["table_name"].(string)
 	if !ok || tableName == "" {
 		return newToolResultError("table_name is required"), nil
+	}
+
+	if err := s.checkReadPackageByName(ctx, tableName); err != nil {
+		return newToolResultError(fmt.Sprintf("Read blocked by package restriction: %v", err)), nil
 	}
 
 	source, err := s.adtClient.GetTable(ctx, tableName)
@@ -247,6 +275,10 @@ func (s *Server) handleGetTableContents(ctx context.Context, request mcp.CallToo
 	}
 	if columnsOnly {
 		fetchRows = 1 // minimal fetch for schema
+	}
+
+	if err := s.checkReadPackageByName(ctx, tableName); err != nil {
+		return newToolResultError(fmt.Sprintf("Read blocked by package restriction: %v", err)), nil
 	}
 
 	contents, err := s.adtClient.GetTableContents(ctx, tableName, fetchRows, sqlQuery)
@@ -318,6 +350,10 @@ func (s *Server) handleGetCDSDependencies(ctx context.Context, request mcp.CallT
 		opts.ContextPackage = pkg
 	}
 
+	if err := s.checkReadPackageByName(ctx, ddlsName); err != nil {
+		return newToolResultError(fmt.Sprintf("Read blocked by package restriction: %v", err)), nil
+	}
+
 	dependencyTree, err := s.adtClient.GetCDSDependencies(ctx, ddlsName, opts)
 	if err != nil {
 		return newToolResultError(fmt.Sprintf("Failed to get CDS dependencies: %v", err)), nil
@@ -347,6 +383,10 @@ func (s *Server) handleGetStructure(ctx context.Context, request mcp.CallToolReq
 		return newToolResultError("structure_name is required"), nil
 	}
 
+	if err := s.checkReadPackageByName(ctx, structName); err != nil {
+		return newToolResultError(fmt.Sprintf("Read blocked by package restriction: %v", err)), nil
+	}
+
 	source, err := s.adtClient.GetStructure(ctx, structName)
 	if err != nil {
 		return newToolResultError(fmt.Sprintf("Failed to get structure: %v", err)), nil
@@ -359,6 +399,10 @@ func (s *Server) handleGetPackage(ctx context.Context, request mcp.CallToolReque
 	packageName, ok := request.GetArguments()["package_name"].(string)
 	if !ok || packageName == "" {
 		return newToolResultError("package_name is required"), nil
+	}
+
+	if err := s.adtClient.CheckReadPackage(packageName); err != nil {
+		return newToolResultError(fmt.Sprintf("Read blocked by package restriction: %v", err)), nil
 	}
 
 	pkg, err := s.adtClient.GetPackage(ctx, packageName)
@@ -376,6 +420,10 @@ func (s *Server) handleGetMessages(ctx context.Context, request mcp.CallToolRequ
 		return newToolResultError("message_class is required"), nil
 	}
 
+	if err := s.checkReadPackageByName(ctx, msgClass); err != nil {
+		return newToolResultError(fmt.Sprintf("Read blocked by package restriction: %v", err)), nil
+	}
+
 	mc, err := s.adtClient.GetMessageClass(ctx, msgClass)
 	if err != nil {
 		return newToolResultError(fmt.Sprintf("Failed to get message class: %v", err)), nil
@@ -389,6 +437,10 @@ func (s *Server) handleGetTransaction(ctx context.Context, request mcp.CallToolR
 	tcode, ok := request.GetArguments()["transaction_name"].(string)
 	if !ok || tcode == "" {
 		return newToolResultError("transaction_name is required"), nil
+	}
+
+	if err := s.checkReadPackageByName(ctx, tcode); err != nil {
+		return newToolResultError(fmt.Sprintf("Read blocked by package restriction: %v", err)), nil
 	}
 
 	tran, err := s.adtClient.GetTransaction(ctx, tcode)
@@ -406,6 +458,10 @@ func (s *Server) handleGetTypeInfo(ctx context.Context, request mcp.CallToolRequ
 		return newToolResultError("type_name is required"), nil
 	}
 
+	if err := s.checkReadPackageByName(ctx, typeName); err != nil {
+		return newToolResultError(fmt.Sprintf("Read blocked by package restriction: %v", err)), nil
+	}
+
 	typeInfo, err := s.adtClient.GetTypeInfo(ctx, typeName)
 	if err != nil {
 		return newToolResultError(fmt.Sprintf("Failed to get type info: %v", err)), nil
@@ -419,6 +475,10 @@ func (s *Server) handleGetAPIReleaseState(ctx context.Context, request mcp.CallT
 	objectURI, ok := request.GetArguments()["object_uri"].(string)
 	if !ok || objectURI == "" {
 		return newToolResultError("object_uri is required"), nil
+	}
+
+	if err := s.checkReadPackage(ctx, objectURI); err != nil {
+		return newToolResultError(fmt.Sprintf("Read blocked by package restriction: %v", err)), nil
 	}
 
 	state, err := s.adtClient.GetAPIReleaseState(ctx, objectURI)

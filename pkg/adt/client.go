@@ -134,6 +134,21 @@ func (c *Client) checkObjectPackageSafety(ctx context.Context, objectURL string)
 	return c.checkPackageSafety(pkg)
 }
 
+// GetObjectPackage resolves the SAP package for an ADT object URL.
+func (c *Client) GetObjectPackage(ctx context.Context, objectURL string) (string, error) {
+	return c.getObjectPackage(ctx, objectURL)
+}
+
+// CheckReadPackage returns an error if reading from the package is blocked by AllowedReadPackages.
+func (c *Client) CheckReadPackage(pkg string) error {
+	return c.config.Safety.CheckReadPackage(pkg)
+}
+
+// HasReadPackageRestriction reports whether AllowedReadPackages is configured.
+func (c *Client) HasReadPackageRestriction() bool {
+	return len(c.config.Safety.AllowedReadPackages) > 0
+}
+
 // checkTransportableEdit checks if editing objects that require transports is allowed.
 func (c *Client) checkTransportableEdit(transport, opName string) error {
 	return c.config.Safety.CheckTransportableEdit(transport, opName)

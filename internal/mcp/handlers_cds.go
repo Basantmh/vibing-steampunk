@@ -15,6 +15,10 @@ func (s *Server) handleGetCDSImpactAnalysis(ctx context.Context, request mcp.Cal
 		return newToolResultError("view_name is required"), nil
 	}
 
+	if err := s.checkReadPackageByName(ctx, viewName); err != nil {
+		return newToolResultError(fmt.Sprintf("Read blocked by package restriction: %v", err)), nil
+	}
+
 	result, err := s.adtClient.GetCDSImpactAnalysis(ctx, viewName)
 	if err != nil {
 		return newToolResultError(fmt.Sprintf("GetCDSImpactAnalysis failed: %v", err)), nil
@@ -29,6 +33,10 @@ func (s *Server) handleGetCDSElementInfo(ctx context.Context, request mcp.CallTo
 	viewName, ok := request.GetArguments()["view_name"].(string)
 	if !ok || viewName == "" {
 		return newToolResultError("view_name is required"), nil
+	}
+
+	if err := s.checkReadPackageByName(ctx, viewName); err != nil {
+		return newToolResultError(fmt.Sprintf("Read blocked by package restriction: %v", err)), nil
 	}
 
 	result, err := s.adtClient.GetCDSElementInfo(ctx, viewName)
