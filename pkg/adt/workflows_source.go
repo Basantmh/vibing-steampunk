@@ -218,10 +218,10 @@ func (c *Client) WriteSource(ctx context.Context, objectType, name, source strin
 
 	// Validate object type
 	switch objectType {
-	case "PROG", "CLAS", "INTF", "DDLS", "BDEF", "SRVD", "SRVB":
+	case "PROG", "CLAS", "INTF", "INCL", "DDLS", "BDEF", "SRVD", "SRVB":
 		// Supported types
 	default:
-		result.Message = fmt.Sprintf("Unsupported object type: %s (supported: PROG, CLAS, INTF, DDLS, BDEF, SRVD, SRVB)", objectType)
+		result.Message = fmt.Sprintf("Unsupported object type: %s (supported: PROG, CLAS, INTF, INCL, DDLS, BDEF, SRVD, SRVB)", objectType)
 		return result, nil
 	}
 
@@ -238,6 +238,9 @@ func (c *Client) WriteSource(ctx context.Context, objectType, name, source strin
 			objectExists = (err == nil)
 		case "INTF":
 			_, err := c.GetInterface(ctx, name)
+			objectExists = (err == nil)
+		case "INCL":
+			_, err := c.GetInclude(ctx, name)
 			objectExists = (err == nil)
 		case "DDLS":
 			_, err := c.GetDDLS(ctx, name)
@@ -315,6 +318,29 @@ func (c *Client) writeSourceCreate(ctx context.Context, objectType, name, source
 		result.SyntaxErrors = progResult.SyntaxErrors
 		result.Activation = progResult.Activation
 		result.Message = progResult.Message
+		return result, nil
+
+	case "INCL":
+		if err := c.CreateObject(ctx, CreateObjectOptions{
+			ObjectType:  ObjectTypeInclude,
+			Name:        name,
+			Description: opts.Description,
+			PackageName: opts.Package,
+			Transport:   opts.Transport,
+		}); err != nil {
+			result.Message = fmt.Sprintf("Failed to create include: %v", err)
+			return result, nil
+		}
+		inclResult, err := c.WriteInclude(ctx, name, source, opts.Transport)
+		if err != nil {
+			result.Message = fmt.Sprintf("Failed to write include source: %v", err)
+			return result, nil
+		}
+		result.Success = inclResult.Success
+		result.ObjectURL = inclResult.ObjectURL
+		result.SyntaxErrors = inclResult.SyntaxErrors
+		result.Activation = inclResult.Activation
+		result.Message = inclResult.Message
 		return result, nil
 
 	case "CLAS":
@@ -400,7 +426,7 @@ func (c *Client) writeSourceCreate(ctx context.Context, objectType, name, source
 		result.SyntaxErrors = syntaxErrors
 
 		// Lock
-		lock, err := c.LockObject(ctx, objectURL, "MODIFY")
+		lock, err := c.LockObject(ctx, objectURL, "MODIFY", "")
 		if err != nil {
 			result.Message = fmt.Sprintf("Failed to lock object: %v", err)
 			return result, nil
@@ -485,7 +511,7 @@ func (c *Client) writeSourceCreate(ctx context.Context, objectType, name, source
 			sourceURL := objectURL + "/source/main"
 
 			// Lock
-			lock, err := c.LockObject(ctx, objectURL, "MODIFY")
+			lock, err := c.LockObject(ctx, objectURL, "MODIFY", "")
 			if err != nil {
 				result.Message = fmt.Sprintf("Failed to lock BDEF: %v", err)
 				return result, nil
@@ -542,7 +568,7 @@ func (c *Client) writeSourceCreate(ctx context.Context, objectType, name, source
 		result.SyntaxErrors = syntaxErrors
 
 		// Lock
-		lock, err := c.LockObject(ctx, objectURL, "MODIFY")
+		lock, err := c.LockObject(ctx, objectURL, "MODIFY", "")
 		if err != nil {
 			result.Message = fmt.Sprintf("Failed to lock object: %v", err)
 			return result, nil
@@ -683,6 +709,19 @@ func (c *Client) writeSourceUpdate(ctx context.Context, objectType, name, source
 		result.Message = progResult.Message
 		return result, nil
 
+	case "INCL":
+		inclResult, err := c.WriteInclude(ctx, name, source, opts.Transport)
+		if err != nil {
+			result.Message = fmt.Sprintf("Failed to update include: %v", err)
+			return result, nil
+		}
+		result.Success = inclResult.Success
+		result.ObjectURL = inclResult.ObjectURL
+		result.SyntaxErrors = inclResult.SyntaxErrors
+		result.Activation = inclResult.Activation
+		result.Message = inclResult.Message
+		return result, nil
+
 	case "CLAS":
 		// Method-level update: replace only the specified method
 		if opts.Method != "" {
@@ -716,7 +755,7 @@ func (c *Client) writeSourceUpdate(ctx context.Context, objectType, name, source
 			objectURL := fmt.Sprintf("/sap/bc/adt/oo/classes/%s", url.PathEscape(name))
 
 			// Lock for test update
-			lock, err := c.LockObject(ctx, objectURL, "MODIFY")
+			lock, err := c.LockObject(ctx, objectURL, "MODIFY", "")
 			if err != nil {
 				result.Message += fmt.Sprintf(" (Warning: Failed to lock for test update: %v)", err)
 				return result, nil
@@ -780,7 +819,7 @@ func (c *Client) writeSourceUpdate(ctx context.Context, objectType, name, source
 		result.SyntaxErrors = syntaxErrors
 
 		// Lock
-		lock, err := c.LockObject(ctx, objectURL, "MODIFY")
+		lock, err := c.LockObject(ctx, objectURL, "MODIFY", "")
 		if err != nil {
 			result.Message = fmt.Sprintf("Failed to lock object: %v", err)
 			return result, nil
@@ -855,7 +894,7 @@ func (c *Client) writeSourceUpdate(ctx context.Context, objectType, name, source
 		result.SyntaxErrors = syntaxErrors
 
 		// Lock
-		lock, err := c.LockObject(ctx, objectURL, "MODIFY")
+		lock, err := c.LockObject(ctx, objectURL, "MODIFY", "")
 		if err != nil {
 			result.Message = fmt.Sprintf("Failed to lock object: %v", err)
 			return result, nil
@@ -984,7 +1023,7 @@ func (c *Client) writeClassMethodUpdate(ctx context.Context, className, methodNa
 	result.SyntaxErrors = syntaxErrors
 
 	// Lock
-	lock, err := c.LockObject(ctx, objectURL, "MODIFY")
+	lock, err := c.LockObject(ctx, objectURL, "MODIFY", "")
 	if err != nil {
 		result.Message = fmt.Sprintf("Failed to lock class: %v", err)
 		return result, nil
