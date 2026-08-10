@@ -8,10 +8,6 @@
 > See also: [OData ↔ MCP Bridge](https://github.com/oisee/odata_mcp_go) for SAP data access.
 >
 > **Want to review or test?** Start here: **[Reviewer Guide](docs/reviewer-guide.md)** — 8 hands-on tasks, no SAP needed.
->
-> **Fork notice:** this is `frd1201/vibing-steampunk`, a downstream fork of
-> [oisee/vibing-steampunk](https://github.com/oisee/vibing-steampunk) with its own 3.x release line.
-> Build from this repo rather than `go install`. See **[FORK.md](FORK.md)**.
 
 ![Vibing ABAP Developer](./media/vibing-steampunk.png)
 

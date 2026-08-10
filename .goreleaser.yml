@@ -58,11 +58,11 @@ changelog:
 
 release:
   github:
-    owner: frd1201
+    owner: oisee
     name: vibing-steampunk
   draft: false
   # Automatically mark as pre-release if version contains -rc, -beta, -alpha
   prerelease: auto
   name_template: "v{{ .Version }}"
   footer: |
-    **Full Changelog**: https://github.com/frd1201/vibing-steampunk/blob/main/CHANGELOG.md
+    **Full Changelog**: https://github.com/oisee/vibing-steampunk/blob/main/CHANGELOG.md
