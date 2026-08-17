@@ -147,7 +147,7 @@ ENDCLASS.
 	defer func() {
 		if !opts.KeepProgram {
 			// Try to delete the program
-			lock, lockErr := c.LockObject(ctx, objectURL, "MODIFY")
+			lock, lockErr := c.LockObject(ctx, objectURL, "MODIFY", "")
 			if lockErr == nil {
 				_ = c.DeleteObject(ctx, objectURL, lock.LockHandle, "")
 				result.CleanedUp = true
@@ -156,7 +156,7 @@ ENDCLASS.
 	}()
 
 	// Step 2: Lock and update source
-	lock, err := c.LockObject(ctx, objectURL, "MODIFY")
+	lock, err := c.LockObject(ctx, objectURL, "MODIFY", "")
 	if err != nil {
 		result.Message = fmt.Sprintf("Failed to lock temp program: %v", err)
 		return result, nil

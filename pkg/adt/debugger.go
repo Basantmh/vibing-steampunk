@@ -603,9 +603,10 @@ func (c *Client) DebuggerListen(ctx context.Context, opts *ListenOptions) (*List
 	defer cancel()
 
 	resp, err := c.transport.Request(listenCtx, "/sap/bc/adt/debugger/listeners", &RequestOptions{
-		Method: http.MethodPost,
-		Accept: "application/vnd.sap.as+xml",
-		Query:  query,
+		Method:   http.MethodPost,
+		Accept:   "application/vnd.sap.as+xml",
+		Query:    query,
+		LongPoll: true, // listenCtx above is the real bound; the default client would cut this off at 60s
 	})
 	if err != nil {
 		// Check for conflict error
@@ -987,10 +988,14 @@ func (c *Client) DebuggerAttach(ctx context.Context, debuggeeID string, user str
 		query.Set("requestUser", user)
 	}
 
+	// Stateful is mandatory: the debuggee is bound to the server-side session this
+	// request creates. Without it every later call (stack/variables/step/detach)
+	// lands in a fresh session and ADT answers 500 "noSessionAttached".
 	resp, err := c.transport.Request(ctx, "/sap/bc/adt/debugger", &RequestOptions{
-		Method: http.MethodPost,
-		Accept: "application/xml",
-		Query:  query,
+		Method:   http.MethodPost,
+		Accept:   "application/xml",
+		Query:    query,
+		Stateful: true,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("debugger attach failed: %w", err)
@@ -1003,7 +1008,21 @@ func (c *Client) DebuggerAttach(ctx context.Context, debuggeeID string, user str
 // This releases the debuggee and ends the debugging session.
 func (c *Client) DebuggerDetach(ctx context.Context) error {
 	_, err := c.DebuggerStep(ctx, DebugTerminate, "")
+	if err != nil && isDebuggeeGone(err) {
+		// the debuggee already finished (stepped off the end, or terminated on
+		// its own) — nothing left to detach from, which is what detach wanted
+		return nil
+	}
 	return err
+}
+
+// isDebuggeeGone reports whether an ADT debugger error means the debuggee no
+// longer exists (already ended/disconnected) rather than a real failure.
+func isDebuggeeGone(err error) bool {
+	s := err.Error()
+	return strings.Contains(s, "debuggeeEnded") ||
+		strings.Contains(s, "DBGSESSIONEND") ||
+		strings.Contains(s, "SLAVENOTCONN")
 }
 
 // DebuggerStep performs a step operation in the debugger.
@@ -1017,9 +1036,10 @@ func (c *Client) DebuggerStep(ctx context.Context, stepType DebugStepType, uri s
 	}
 
 	resp, err := c.transport.Request(ctx, "/sap/bc/adt/debugger", &RequestOptions{
-		Method: http.MethodPost,
-		Accept: "application/xml",
-		Query:  query,
+		Method:   http.MethodPost,
+		Accept:   "application/xml",
+		Query:    query,
+		Stateful: true,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("debugger step failed: %w", err)
@@ -1038,10 +1058,14 @@ func (c *Client) DebuggerGetStack(ctx context.Context, semanticURIs bool) (*Debu
 		query.Set("semanticURIs", "true")
 	}
 
-	resp, err := c.transport.Request(ctx, "/sap/bc/adt/debugger/stack", &RequestOptions{
-		Method: http.MethodGet,
-		Accept: "application/xml",
-		Query:  query,
+	// Path is /sap/bc/adt/debugger with method=getStack, NOT /sap/bc/adt/debugger/stack
+	// (that 404s: "No suitable resource found"). Every other debugger verb, and
+	// DebuggerStepWithBatch below, use this same form.
+	resp, err := c.transport.Request(ctx, "/sap/bc/adt/debugger", &RequestOptions{
+		Method:   http.MethodPost,
+		Accept:   "application/xml",
+		Query:    query,
+		Stateful: true,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("debugger get stack failed: %w", err)
@@ -1072,6 +1096,7 @@ func (c *Client) DebuggerGetVariables(ctx context.Context, variableIDs []string)
 		Accept:      "application/vnd.sap.as+xml;charset=UTF-8;dataname=com.sap.adt.debugger.Variables",
 		Query:       url.Values{"method": []string{"getVariables"}},
 		Body:        []byte(body),
+		Stateful:    true,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("debugger get variables failed: %w", err)
@@ -1102,6 +1127,7 @@ func (c *Client) DebuggerGetChildVariables(ctx context.Context, parentIDs []stri
 		Accept:      "application/vnd.sap.as+xml;charset=UTF-8;dataname=com.sap.adt.debugger.ChildVariables",
 		Query:       url.Values{"method": []string{"getChildVariables"}},
 		Body:        []byte(body),
+		Stateful:    true,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("debugger get child variables failed: %w", err)
@@ -1119,9 +1145,10 @@ func (c *Client) DebuggerSetVariableValue(ctx context.Context, variableName, val
 	query.Set("variableName", variableName)
 
 	resp, err := c.transport.Request(ctx, "/sap/bc/adt/debugger", &RequestOptions{
-		Method: http.MethodPost,
-		Query:  query,
-		Body:   []byte(value),
+		Method:   http.MethodPost,
+		Query:    query,
+		Body:     []byte(value),
+		Stateful: true,
 	})
 	if err != nil {
 		return "", fmt.Errorf("debugger set variable value failed: %w", err)
@@ -1689,6 +1716,7 @@ func (c *Client) DebuggerBatchRequest(ctx context.Context, operations []DebugBat
 		ContentType: contentType,
 		Accept:      "multipart/mixed",
 		Body:        []byte(body.String()),
+		Stateful:    true,
 		Headers: map[string]string{
 			"User-Agent":          "vsp/1.0 (compatible; Eclipse ADT)",
 			"X-sap-adt-profiling": "server-time",

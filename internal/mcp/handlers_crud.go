@@ -76,7 +76,7 @@ func (s *Server) handleLockObject(ctx context.Context, request mcp.CallToolReque
 		accessMode = am
 	}
 
-	result, err := s.adtClient.LockObject(ctx, objectURL, accessMode)
+	result, err := s.adtClient.LockObject(ctx, objectURL, accessMode, "")
 	if err != nil {
 		return newToolResultError(fmt.Sprintf("Failed to lock object: %v", err)), nil
 	}

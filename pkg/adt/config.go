@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/cookiejar"
+	"net/url"
 	"time"
+	"sync"
 )
 
 // SessionType defines how the client manages server sessions.
@@ -54,6 +56,63 @@ type Config struct {
 	// ReauthFunc is called on 401 to re-authenticate (e.g., re-run SAML dance).
 	// Returns fresh cookies for the SAP system. Only used when HasBasicAuth() is false.
 	ReauthFunc func(ctx context.Context) (map[string]string, error)
+	// ClientCert, when set, is presented for TLS mutual authentication (mTLS)
+	// instead of a password. On macOS it is loaded from the keychain
+	// (LoadKeychainClientCert) so the private key never leaves the keystore.
+	ClientCert *tls.Certificate
+
+	// ClientCertProvider, when set, resolves the client certificate lazily at
+	// each TLS handshake (takes precedence over ClientCert). This keeps the
+	// server alive when no cert is available yet (SLC not logged in) and picks
+	// up a fresh cert after an SLC re-login without a restart.
+	ClientCertProvider func() (*tls.Certificate, error)
+}
+
+// tlsClientConfig builds the TLS config for outbound connections, adding the
+// client certificate for mTLS when configured. When a client cert is present
+// the max TLS version is pinned to 1.2 — the NetWeaver 7.50 ICM drops TLS 1.3
+// client-certificate handshakes.
+func (c *Config) tlsClientConfig() *tls.Config {
+	t := &tls.Config{InsecureSkipVerify: c.InsecureSkipVerify}
+	if c.ClientCertProvider != nil {
+		provider := c.ClientCertProvider
+		t.GetClientCertificate = func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
+			return provider()
+		}
+		t.MaxVersion = tls.VersionTLS12
+	} else if c.ClientCert != nil {
+		t.Certificates = []tls.Certificate{*c.ClientCert}
+		t.MaxVersion = tls.VersionTLS12
+	}
+	return t
+}
+
+// HasClientCert reports whether TLS client-certificate auth is configured.
+func (c *Config) HasClientCert() bool {
+	return c.ClientCert != nil || c.ClientCertProvider != nil
+}
+
+// NewCachingCertProvider wraps a certificate loader with caching: the loaded
+// cert is reused until shortly before its NotAfter, then re-resolved. Failed
+// loads are retried on every call (so an SLC login mid-session heals the next
+// handshake without a restart).
+func NewCachingCertProvider(load func() (*tls.Certificate, error)) func() (*tls.Certificate, error) {
+	var mu sync.Mutex
+	var cached *tls.Certificate
+	return func() (*tls.Certificate, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		if cached != nil && cached.Leaf != nil &&
+			time.Now().Add(5*time.Minute).Before(cached.Leaf.NotAfter) {
+			return cached, nil
+		}
+		cert, err := load()
+		if err != nil {
+			return nil, err
+		}
+		cached = cert
+		return cached, nil
+	}
 }
 
 // Option is a functional option for configuring the ADT client.
@@ -98,6 +157,21 @@ func WithTimeout(d time.Duration) Option {
 func WithCookies(cookies map[string]string) Option {
 	return func(c *Config) {
 		c.Cookies = cookies
+	}
+}
+
+// WithClientCert sets a TLS client certificate for mutual-auth (mTLS) login.
+func WithClientCert(cert *tls.Certificate) Option {
+	return func(c *Config) {
+		c.ClientCert = cert
+	}
+}
+
+// WithClientCertProvider sets a lazy per-handshake certificate resolver for
+// mutual-auth (mTLS) login. Takes precedence over WithClientCert.
+func WithClientCertProvider(p func() (*tls.Certificate, error)) Option {
+	return func(c *Config) {
+		c.ClientCertProvider = p
 	}
 }
 
@@ -234,15 +308,36 @@ func WithTerminalID(terminalID string) Option {
 	}
 }
 
+// httpCookieJar wraps cookiejar.Jar and strips the Secure flag when storing cookies
+// received over plain HTTP. This is required for SAP systems accessed via HTTP reverse
+// proxies that still set Secure cookies (e.g. nginx in front of SAP ICM). Go's standard
+// jar won't send Secure cookies on HTTP requests, causing CSRF tokens to appear expired
+// because the session cookie never reaches the server on subsequent requests.
+type httpCookieJar struct {
+	*cookiejar.Jar
+}
+
+func (j *httpCookieJar) SetCookies(u *url.URL, cookies []*http.Cookie) {
+	if u.Scheme == "http" {
+		stripped := make([]*http.Cookie, len(cookies))
+		for i, c := range cookies {
+			copy := *c
+			copy.Secure = false
+			stripped[i] = &copy
+		}
+		cookies = stripped
+	}
+	j.Jar.SetCookies(u, cookies)
+}
+
 // NewHTTPClient creates an http.Client configured for the given Config.
 func (c *Config) NewHTTPClient() *http.Client {
-	jar, _ := cookiejar.New(nil)
+	base, _ := cookiejar.New(nil)
+	jar := &httpCookieJar{base}
 
 	transport := &http.Transport{
-		Proxy: http.ProxyFromEnvironment, // Honor HTTP_PROXY/HTTPS_PROXY env vars
-		TLSClientConfig: &tls.Config{
-			InsecureSkipVerify: c.InsecureSkipVerify,
-		},
+		Proxy:           http.ProxyFromEnvironment, // Honor HTTP_PROXY/HTTPS_PROXY env vars
+		TLSClientConfig: c.tlsClientConfig(),
 	}
 
 	client := &http.Client{
@@ -251,17 +346,37 @@ func (c *Config) NewHTTPClient() *http.Client {
 		Timeout:   c.Timeout,
 	}
 
-	// Preserve Authorization header across redirects.
-	// Go's default strips it per RFC 7235 §4.2, but SAP BTP/Cloud
-	// authentication flows require it to survive redirects.
-	// Without this, BTP users get 401 even though curl works (issue #90).
+	// Preserve ADT-critical headers across redirects.
+	//
+	// Go's default strips Authorization / WWW-Authenticate / Cookie / Cookie2
+	// on cross-origin redirects per RFC 7235 §4.2 — SAP BTP/Cloud SAML flows
+	// need Authorization back, otherwise the IdP dance drops it and the user
+	// gets 401 even though curl works (issue #90).
+	//
+	// Custom headers like X-CSRF-Token and X-sap-adt-sessiontype are *not*
+	// in Go's sensitive-headers list, so Go technically forwards them by
+	// default. We re-set them explicitly anyway for two reasons:
+	//   - defensive: guards against any Go version or middleware tweak that
+	//     decides to strip custom headers on its own;
+	//   - intent: makes it obvious in the code that these two headers are
+	//     load-bearing for the lock→write→unlock ADT sequence. If either
+	//     goes missing across a redirect, the second hop hits SAP with a
+	//     fresh (stateless) session-type or a missing CSRF token, and the
+	//     lock handle / mutation is rejected.
 	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
 		if len(via) >= 10 {
 			return fmt.Errorf("too many redirects")
 		}
 		if len(via) > 0 {
-			if auth := via[0].Header.Get("Authorization"); auth != "" {
+			first := via[0]
+			if auth := first.Header.Get("Authorization"); auth != "" {
 				req.Header.Set("Authorization", auth)
+			}
+			if csrf := first.Header.Get("X-CSRF-Token"); csrf != "" {
+				req.Header.Set("X-CSRF-Token", csrf)
+			}
+			if st := first.Header.Get("X-sap-adt-sessiontype"); st != "" {
+				req.Header.Set("X-sap-adt-sessiontype", st)
 			}
 		}
 		return nil

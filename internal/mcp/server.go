@@ -3,7 +3,9 @@ package mcp
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -50,6 +52,14 @@ type Config struct {
 	Language           string
 	InsecureSkipVerify bool
 
+	// ClientCert, when set, is presented for TLS mutual auth (mTLS) instead of
+	// a password. On macOS it is loaded from the keychain in main.go.
+	ClientCert *tls.Certificate
+
+	// ClientCertProvider resolves the cert lazily per TLS handshake (wins over
+	// ClientCert): the server stays up without a cert and heals after SLC login.
+	ClientCertProvider func() (*tls.Certificate, error)
+
 	// Cookie authentication (alternative to basic auth)
 	Cookies map[string]string
 
@@ -88,6 +98,9 @@ type Config struct {
 	// Graph / co-change configuration
 	TransportAttribute string // E070A attribute name for CR-level co-change aggregation
 
+	// Session type: "stateful" keeps SAP session across requests (required for lock/write flows)
+	SessionType string
+
 	// Debugger configuration
 	TerminalID string // SAP GUI terminal ID for cross-tool breakpoint sharing
 
@@ -121,11 +134,25 @@ func NewServer(cfg *Config) *Server {
 	if cfg.InsecureSkipVerify {
 		opts = append(opts, adt.WithInsecureSkipVerify())
 	}
+	if cfg.ClientCertProvider != nil {
+		opts = append(opts, adt.WithClientCertProvider(cfg.ClientCertProvider))
+	} else if cfg.ClientCert != nil {
+		opts = append(opts, adt.WithClientCert(cfg.ClientCert))
+	}
 	if len(cfg.Cookies) > 0 {
 		opts = append(opts, adt.WithCookies(cfg.Cookies))
 	}
 	if cfg.Verbose {
 		opts = append(opts, adt.WithVerbose())
+	}
+	if cfg.SessionType != "" {
+		st := adt.SessionType(cfg.SessionType)
+		switch st {
+		case adt.SessionStateful, adt.SessionStateless, adt.SessionKeep:
+			opts = append(opts, adt.WithSessionType(st))
+		default:
+			fmt.Fprintf(os.Stderr, "[vsp] warning: unknown SAP_SESSION_TYPE %q, using default (stateless)\n", cfg.SessionType)
+		}
 	}
 	if cfg.ReauthFunc != nil {
 		opts = append(opts, adt.WithReauthFunc(cfg.ReauthFunc))
@@ -304,6 +331,11 @@ func (s *Server) ensureWSConnected(ctx context.Context, toolName string) *mcp.Ca
 		s.amdpWSClient = adt.NewAMDPWebSocketClient(
 			s.config.BaseURL, s.config.Client, s.config.Username, s.config.Password, s.config.InsecureSkipVerify,
 		)
+		if s.config.ClientCertProvider != nil {
+			s.amdpWSClient.SetClientCertProvider(s.config.ClientCertProvider)
+		} else if s.config.ClientCert != nil {
+			s.amdpWSClient.SetClientCert(s.config.ClientCert)
+		}
 		if err := s.amdpWSClient.Connect(ctx); err != nil {
 			s.amdpWSClient = nil
 			return newToolResultError(fmt.Sprintf("%s: WebSocket connect failed: %v", toolName, err))

@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/oisee/vibing-steampunk/pkg/adt"
@@ -232,22 +233,59 @@ func (s *Server) handleDebuggerGetVariables(ctx context.Context, request mcp.Cal
 		variableIDs = []string{"@ROOT"}
 	}
 
-	// If @ROOT is requested, use GetChildVariables for top-level vars
-	if len(variableIDs) == 1 && variableIDs[0] == "@ROOT" {
-		result, err := s.adtClient.DebuggerGetChildVariables(ctx, []string{"@ROOT", "@DATAAGING"})
+	// Pseudo-node IDs (@ROOT, @LOCALS, @GLOBALS, @DATAAGING, ...) are hierarchy
+	// PARENTS: they have no value of their own and must be expanded via
+	// getChildVariables. Feeding them to getVariables returns junk. Their
+	// children split in two: leaves arrive in the VARIABLES table (with values),
+	// group nodes arrive only in the HIERARCHIES table — print both, otherwise
+	// @ROOT looks like it has no variables (its children @LOCALS/@GLOBALS/... are
+	// all group nodes).
+	allPseudo := true
+	for _, id := range variableIDs {
+		if !strings.HasPrefix(id, "@") {
+			allPseudo = false
+			break
+		}
+	}
+	if allPseudo {
+		// expanding a group the debugger did not offer at the current position
+		// has been observed to hang past every client timeout — bound it so the
+		// tool call errors instead of blocking the agent (see drafts/ bundle)
+		expandCtx, cancel := context.WithTimeout(ctx, 90*time.Second)
+		defer cancel()
+		result, err := s.adtClient.DebuggerGetChildVariables(expandCtx, variableIDs)
 		if err != nil {
 			return newToolResultError(fmt.Sprintf("DebuggerGetVariables failed: %v", err)), nil
 		}
 
+		valuesByID := make(map[string]bool, len(result.Variables))
 		var sb strings.Builder
 		sb.WriteString("Variables:\n\n")
 
 		for _, v := range result.Variables {
+			valuesByID[v.ID] = true
 			fmt.Fprintf(&sb, "%s: %s = %s\n", v.Name, v.DeclaredTypeName, v.Value)
+			fmt.Fprintf(&sb, "  ID: %s\n", v.ID)
 			fmt.Fprintf(&sb, "  MetaType: %s, Kind: %s\n", v.MetaType, v.Kind)
 			if v.IsComplexType() {
 				fmt.Fprintf(&sb, "  (complex type - use variable ID '%s' to expand)\n", v.ID)
 			}
+		}
+
+		var nodes []string
+		for _, h := range result.Hierarchies {
+			if !valuesByID[h.ChildID] {
+				nodes = append(nodes, fmt.Sprintf("%s (expand with variable ID '%s')", h.ChildName, h.ChildID))
+			}
+		}
+		if len(nodes) > 0 {
+			sb.WriteString("\nGroups:\n")
+			for _, n := range nodes {
+				fmt.Fprintf(&sb, "  - %s\n", n)
+			}
+		}
+		if len(result.Variables) == 0 && len(nodes) == 0 {
+			sb.WriteString("(no variables at this position)\n")
 		}
 
 		return mcp.NewToolResultText(sb.String()), nil

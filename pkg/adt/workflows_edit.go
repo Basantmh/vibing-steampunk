@@ -190,8 +190,9 @@ func (c *Client) EditSourceWithOptions(ctx context.Context, objectURL, oldString
 		result.Method = opts.Method
 	}
 
-	// Detect if this is a class include (e.g., /sap/bc/adt/oo/classes/ZCL_FOO/includes/testclasses)
-	isClassInclude := strings.Contains(objectURL, "/includes/")
+	// Detect if this is a class include (e.g., /sap/bc/adt/oo/classes/ZCL_FOO/includes/testclasses).
+	// Program includes (/programs/includes/ZZ_NAME) are NOT class includes — /includes/ is their collection path.
+	isClassInclude := strings.Contains(objectURL, "/oo/classes/") && strings.Contains(objectURL, "/includes/")
 	var className string
 	var includeType ClassIncludeType
 	var parentClassURL string
@@ -360,7 +361,7 @@ func (c *Client) EditSourceWithOptions(ctx context.Context, objectURL, oldString
 	if isClassInclude && parentClassURL != "" {
 		lockURL = parentClassURL
 	}
-	lockResult, err := c.LockObject(ctx, lockURL, "MODIFY")
+	lockResult, err := c.LockObject(ctx, lockURL, "MODIFY", opts.Transport)
 	if err != nil {
 		result.Message = fmt.Sprintf("Failed to lock object: %v", err)
 		return result, nil

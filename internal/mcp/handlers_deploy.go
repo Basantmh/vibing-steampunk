@@ -232,7 +232,7 @@ func (s *Server) handleDeployZip(ctx context.Context, request mcp.CallToolReques
 		fmt.Fprintf(&sb, "  [%d/%d] Upload %s %s... ", i+1, len(deployable), obj.Type, obj.Name)
 
 		// Lock
-		lockResult, err := s.adtClient.LockObject(ctx, objectURL, "MODIFY")
+		lockResult, err := s.adtClient.LockObject(ctx, objectURL, "MODIFY", "")
 		if err != nil {
 			fmt.Fprintf(&sb, "LOCK FAIL: %v\n", err)
 			uploadFailed++
