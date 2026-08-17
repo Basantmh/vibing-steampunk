@@ -13,7 +13,7 @@ import (
 )
 
 // routeCRUDAction routes "edit" for LOCK/UNLOCK/UPDATE_SOURCE/
-// RECOVER_FAILED_CREATE, "create" for OBJECT/DEVC/TABL/CLONE, "delete"
+// RECOVER_FAILED_CREATE, "create" for OBJECT/DEVC/TABL/STRU/CLONE, "delete"
 // for OBJECT.
 func (s *Server) routeCRUDAction(ctx context.Context, action, objectType, objectName string, params map[string]any) (*mcp.CallToolResult, bool, error) {
 	if action == "edit" {
@@ -41,6 +41,8 @@ func (s *Server) routeCRUDAction(ctx context.Context, action, objectType, object
 			return s.callHandler(ctx, s.handleCreatePackage, params)
 		case "TABL":
 			return s.callHandler(ctx, s.handleCreateTable, params)
+		case "STRU":
+			return s.callHandler(ctx, s.handleCreateStructure, params)
 		case "CLONE":
 			return s.callHandler(ctx, s.handleCloneObject, params)
 		}
@@ -333,6 +335,72 @@ func (s *Server) handleCreateTable(ctx context.Context, request mcp.CallToolRequ
 		"description": description,
 		"fields":      len(fields),
 	}
+	output, _ := json.MarshalIndent(result, "", "  ")
+	return mcp.NewToolResultText(string(output)), nil
+}
+
+func (s *Server) handleCreateStructure(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	name, ok := request.GetArguments()["name"].(string)
+	if !ok || name == "" {
+		return newToolResultError("name is required"), nil
+	}
+
+	description, ok := request.GetArguments()["description"].(string)
+	if !ok || description == "" {
+		return newToolResultError("description is required"), nil
+	}
+
+	componentsJSON, ok := request.GetArguments()["components"].(string)
+	if !ok || componentsJSON == "" {
+		return newToolResultError("components is required (JSON array)"), nil
+	}
+
+	// Parse components JSON
+	var components []adt.StructureComponent
+	if err := json.Unmarshal([]byte(componentsJSON), &components); err != nil {
+		return newToolResultError(fmt.Sprintf("Invalid components JSON: %v", err)), nil
+	}
+
+	if len(components) == 0 {
+		return newToolResultError("At least one component is required"), nil
+	}
+
+	// Optional parameters
+	pkg := "$TMP"
+	if p, ok := request.GetArguments()["package"].(string); ok && p != "" {
+		pkg = strings.ToUpper(p)
+	}
+
+	transport := ""
+	if t, ok := request.GetArguments()["transport"].(string); ok && t != "" {
+		transport = t
+	}
+
+	activate := true
+	if a, ok := request.GetArguments()["activate_after_create"].(bool); ok {
+		activate = a
+	}
+
+	opts := adt.CreateStructureOptions{
+		Name:        name,
+		Description: description,
+		Package:     pkg,
+		Components:  components,
+		Transport:   transport,
+		Activate:    activate,
+	}
+
+	result, err := s.adtClient.CreateStructure(ctx, opts)
+	if err != nil {
+		// A partial result means creation succeeded but a later step (source,
+		// activation) failed — report what was achieved alongside the error.
+		if result != nil && result.Created {
+			partial, _ := json.MarshalIndent(result, "", "  ")
+			return newToolResultError(fmt.Sprintf("Structure created but not fully processed: %v\n%s", err, partial)), nil
+		}
+		return newToolResultError(fmt.Sprintf("Failed to create structure: %v", err)), nil
+	}
+
 	output, _ := json.MarshalIndent(result, "", "  ")
 	return mcp.NewToolResultText(string(output)), nil
 }

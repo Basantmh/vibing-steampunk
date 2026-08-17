@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -1144,11 +1146,11 @@ func parsePublishResult(data []byte) (*PublishResult, error) {
 
 // CreateTableOptions defines options for creating a DDIC table.
 type CreateTableOptions struct {
-	Name          string       `json:"name"`          // Table name (uppercase, max 30 chars, must start with Z/Y)
-	Description   string       `json:"description"`   // Short description
-	Package       string       `json:"package"`       // Target package
-	Fields        []TableField `json:"fields"`        // Field definitions
-	Transport     string       `json:"transport,omitempty"` // Transport request (optional for $TMP)
+	Name          string       `json:"name"`                    // Table name (uppercase, max 30 chars, must start with Z/Y)
+	Description   string       `json:"description"`             // Short description
+	Package       string       `json:"package"`                 // Target package
+	Fields        []TableField `json:"fields"`                  // Field definitions
+	Transport     string       `json:"transport,omitempty"`     // Transport request (optional for $TMP)
 	DeliveryClass string       `json:"deliveryClass,omitempty"` // A=Application, C=Customizing, L=Temp, etc. (default: A)
 	TableCategory string       `json:"tableCategory,omitempty"` // TRANSPARENT (default), STRUCTURE, etc.
 }
@@ -1347,4 +1349,344 @@ func mapFieldType(f TableField) string {
 
 func escapeQuote(s string) string {
 	return strings.ReplaceAll(s, "'", "''")
+}
+
+// --- DDIC Structure Operations ---
+
+// StructureComponent defines a single component (field) of a DDIC structure.
+// A component is typed either by an existing ABAP Dictionary data element
+// (DataElement) or by a predefined ABAP type (Type, with Length/Decimals
+// where the type requires them). Exactly one of the two must be set.
+type StructureComponent struct {
+	Name        string `json:"name"`
+	DataElement string `json:"data_element,omitempty"`
+	Type        string `json:"type,omitempty"`
+	Length      int    `json:"length,omitempty"`
+	Decimals    int    `json:"decimals,omitempty"`
+}
+
+// CreateStructureOptions defines options for creating a classic DDIC structure.
+type CreateStructureOptions struct {
+	Name        string               `json:"name"`                // Structure name (uppercase, max 30 chars)
+	Description string               `json:"description"`         // Short description
+	Package     string               `json:"package"`             // Target package (default: $TMP)
+	Components  []StructureComponent `json:"components"`          // Component definitions (data-element based)
+	Transport   string               `json:"transport,omitempty"` // Transport request (optional for $TMP)
+	Activate    bool                 `json:"activate_after_create"`
+}
+
+// CreateStructureResult reports the outcome of CreateStructure. Created and
+// Activated are reported separately so a creation that succeeded but failed
+// to activate is not mistaken for full success.
+type CreateStructureResult struct {
+	Name               string   `json:"name"`
+	Package            string   `json:"package"`
+	Transport          string   `json:"transport,omitempty"`
+	Created            bool     `json:"created"`
+	Activated          bool     `json:"activated"`
+	Status             string   `json:"status"` // "active" or "inactive"
+	ActivationMessages []string `json:"activation_messages,omitempty"`
+}
+
+// ABAP object names may carry a /NAMESPACE/ prefix; component names may not.
+var (
+	abapStructureNameRe = regexp.MustCompile(`^(/[A-Z0-9_]{1,10}/)?[A-Z_][A-Z0-9_]*$`)
+	abapComponentNameRe = regexp.MustCompile(`^[A-Z_][A-Z0-9_]*$`)
+
+	// CHAR32 / NUMC8 / RAW16 shorthand, as also accepted by CreateTable.
+	sizedTypeShorthandRe = regexp.MustCompile(`^(CHAR|NUMC|RAW)([0-9]+)$`)
+)
+
+// structureFixedTypes are predefined ABAP types that take no length or
+// decimals. Values are the DDIC-DDL rendering.
+var structureFixedTypes = map[string]string{
+	"INT1":      "abap.int1",
+	"INT2":      "abap.int2",
+	"INT4":      "abap.int4",
+	"INT8":      "abap.int8",
+	"FLTP":      "abap.fltp",
+	"DATS":      "abap.dats",
+	"TIMS":      "abap.tims",
+	"UTCLONG":   "abap.utclong",
+	"CLNT":      "abap.clnt",
+	"LANG":      "abap.lang",
+	"STRING":    "abap.string(0)",
+	"RAWSTRING": "abap.rawstring(0)",
+}
+
+// structureSizedTypes are predefined types requiring an explicit length,
+// mapped to their DDIC maximum.
+var structureSizedTypes = map[string]int{
+	"CHAR": 30000,
+	"NUMC": 255,
+	"RAW":  32000,
+}
+
+// structureComponentDDLType renders the DDIC-DDL type for one component.
+//
+// Unknown type names are rejected rather than being passed through as a
+// data-element reference (the behavior of CreateTable's mapFieldType). A
+// silent fallback would turn a typo like "CHAR32X" into a reference to a
+// non-existent data element, surfacing only as an opaque activation error.
+//
+// CURR and QUAN are deliberately unsupported: DDIC requires a currency/unit
+// reference annotation for them, which needs a reference-field concept this
+// API does not model yet.
+func structureComponentDDLType(comp StructureComponent) (string, error) {
+	if comp.DataElement != "" {
+		return strings.ToLower(comp.DataElement), nil
+	}
+
+	t := comp.Type
+	length := comp.Length
+	if m := sizedTypeShorthandRe.FindStringSubmatch(t); m != nil {
+		t = m[1]
+		n, err := strconv.Atoi(m[2])
+		if err != nil {
+			return "", fmt.Errorf("invalid length in type %q", comp.Type)
+		}
+		if length != 0 && length != n {
+			return "", fmt.Errorf("type %q already encodes length %d, conflicting with length %d", comp.Type, n, length)
+		}
+		length = n
+	}
+
+	switch t {
+	case "CURR", "QUAN":
+		return "", fmt.Errorf("type %s requires a currency/unit reference field and is not supported yet; use a data element instead", t)
+	}
+
+	if ddl, ok := structureFixedTypes[t]; ok {
+		if comp.Length != 0 {
+			return "", fmt.Errorf("type %s does not take a length", t)
+		}
+		if comp.Decimals != 0 {
+			return "", fmt.Errorf("type %s does not take decimals", t)
+		}
+		return ddl, nil
+	}
+
+	if max, ok := structureSizedTypes[t]; ok {
+		if comp.Decimals != 0 {
+			return "", fmt.Errorf("type %s does not take decimals", t)
+		}
+		if length < 1 || length > max {
+			return "", fmt.Errorf("type %s requires length between 1 and %d, got %d", t, max, length)
+		}
+		return fmt.Sprintf("abap.%s(%d)", strings.ToLower(t), length), nil
+	}
+
+	if t == "DEC" {
+		if length < 1 || length > 31 {
+			return "", fmt.Errorf("type DEC requires length between 1 and 31, got %d", length)
+		}
+		if comp.Decimals < 0 || comp.Decimals > 14 {
+			return "", fmt.Errorf("type DEC requires decimals between 0 and 14, got %d", comp.Decimals)
+		}
+		if comp.Decimals > length {
+			return "", fmt.Errorf("type DEC decimals (%d) cannot exceed length (%d)", comp.Decimals, length)
+		}
+		return fmt.Sprintf("abap.dec(%d,%d)", length, comp.Decimals), nil
+	}
+
+	return "", fmt.Errorf("unknown type %q (supported: CHAR, NUMC, RAW, DEC, INT1, INT2, INT4, INT8, FLTP, DATS, TIMS, UTCLONG, CLNT, LANG, STRING, RAWSTRING; or use data_element)", comp.Type)
+}
+
+// validateCreateStructureOptions normalizes (uppercases) and validates the
+// request. It mutates opts in place and returns the normalized copy.
+func validateCreateStructureOptions(opts CreateStructureOptions) (CreateStructureOptions, error) {
+	opts.Name = strings.ToUpper(strings.TrimSpace(opts.Name))
+	if opts.Name == "" || len(opts.Name) > 30 {
+		return opts, fmt.Errorf("structure name must be 1-30 characters")
+	}
+	if !abapStructureNameRe.MatchString(opts.Name) {
+		return opts, fmt.Errorf("invalid structure name %q", opts.Name)
+	}
+	if strings.TrimSpace(opts.Description) == "" {
+		return opts, fmt.Errorf("description is required")
+	}
+	if opts.Package == "" {
+		opts.Package = "$TMP"
+	}
+	opts.Package = strings.ToUpper(opts.Package)
+	if len(opts.Components) == 0 {
+		return opts, fmt.Errorf("at least one component is required")
+	}
+	seen := make(map[string]bool, len(opts.Components))
+	for i, comp := range opts.Components {
+		name := strings.ToUpper(strings.TrimSpace(comp.Name))
+		dtel := strings.ToUpper(strings.TrimSpace(comp.DataElement))
+		if name == "" {
+			return opts, fmt.Errorf("component %d: name is required", i+1)
+		}
+		if !abapComponentNameRe.MatchString(name) || len(name) > 30 {
+			return opts, fmt.Errorf("component %d: invalid component name %q", i+1, name)
+		}
+		ctype := strings.ToUpper(strings.TrimSpace(comp.Type))
+
+		// data_element and type are mutually exclusive; exactly one is required.
+		switch {
+		case dtel == "" && ctype == "":
+			return opts, fmt.Errorf("component %s: either data_element or type is required", name)
+		case dtel != "" && ctype != "":
+			return opts, fmt.Errorf("component %s: data_element and type are mutually exclusive", name)
+		}
+
+		if dtel != "" && (!abapStructureNameRe.MatchString(dtel) || len(dtel) > 30) {
+			return opts, fmt.Errorf("component %s: invalid data element name %q", name, dtel)
+		}
+		if seen[name] {
+			return opts, fmt.Errorf("duplicate component name %q", name)
+		}
+		seen[name] = true
+		opts.Components[i].Name = name
+		opts.Components[i].DataElement = dtel
+		opts.Components[i].Type = ctype
+
+		// Reject unusable types up front rather than at activation time.
+		if _, err := structureComponentDDLType(opts.Components[i]); err != nil {
+			return opts, fmt.Errorf("component %s: %w", name, err)
+		}
+	}
+	return opts, nil
+}
+
+// buildStructureXML builds the ADT creation payload for a DDIC structure.
+// The payload shape matches abap-adt-api's createBodySimple: same
+// blue:blueSource root as tables, but adtcore:type TABL/DS (structure)
+// instead of TABL/DT (database table). The body only creates the object
+// shell — components are defined via a subsequent source PUT.
+func buildStructureXML(opts CreateStructureOptions) string {
+	return fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
+<blue:blueSource xmlns:blue="http://www.sap.com/wbobj/blue"
+                 xmlns:adtcore="http://www.sap.com/adt/core"
+                 adtcore:name="%s"
+                 adtcore:type="TABL/DS"
+                 adtcore:description="%s">
+  <adtcore:packageRef adtcore:name="%s"/>
+</blue:blueSource>`, escapeXML(opts.Name), escapeXML(opts.Description), escapeXML(opts.Package))
+}
+
+// generateStructureDDL renders the DDIC-DDL source that defines the
+// structure's components (the form ADT PUTs to /source/main).
+func generateStructureDDL(opts CreateStructureOptions) (string, error) {
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("@EndUserText.label : '%s'\n", escapeQuote(opts.Description)))
+	sb.WriteString("@AbapCatalog.enhancement.category : #NOT_EXTENSIBLE\n")
+	sb.WriteString(fmt.Sprintf("define structure %s {\n", strings.ToLower(opts.Name)))
+	for _, comp := range opts.Components {
+		ddlType, err := structureComponentDDLType(comp)
+		if err != nil {
+			return "", fmt.Errorf("component %s: %w", comp.Name, err)
+		}
+		sb.WriteString(fmt.Sprintf("  %s : %s;\n", strings.ToLower(comp.Name), ddlType))
+	}
+	sb.WriteString("}\n")
+	return sb.String(), nil
+}
+
+// CreateStructure creates a classic DDIC structure (SE11 structure, ADT type
+// TABL/DS). Components are typed by data element or predefined ABAP type.
+// Workflow: create inactive shell → lock → PUT DDL source → unlock →
+// optionally activate.
+// On partial failure the returned result still reports which steps succeeded.
+func (c *Client) CreateStructure(ctx context.Context, opts CreateStructureOptions) (*CreateStructureResult, error) {
+	opts, err := validateCreateStructureOptions(opts)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := c.checkMutation(ctx, MutationContext{
+		Op:        OpCreate,
+		OpName:    "CreateStructure",
+		Package:   opts.Package,
+		Transport: opts.Transport,
+	}); err != nil {
+		return nil, err
+	}
+
+	ddlSource, err := generateStructureDDL(opts)
+	if err != nil {
+		return nil, err
+	}
+
+	result := &CreateStructureResult{
+		Name:      opts.Name,
+		Package:   opts.Package,
+		Transport: opts.Transport,
+		Status:    "inactive",
+	}
+
+	// Step 1: Create the structure object (inactive, no components yet)
+	params := url.Values{}
+	if opts.Transport != "" {
+		params.Set("corrNr", opts.Transport)
+	}
+
+	// Content-Type "application/*" follows abap-adt-api's createObject; the
+	// creation POST is not content-negotiated like the table-specific API.
+	_, err = c.transport.Request(ctx, "/sap/bc/adt/ddic/structures", &RequestOptions{
+		Method:      http.MethodPost,
+		Query:       params,
+		Body:        []byte(buildStructureXML(opts)),
+		ContentType: "application/*",
+	})
+	if err != nil {
+		return nil, fmt.Errorf("creating structure object: %w", err)
+	}
+	result.Created = true
+
+	// Step 2: Lock, set DDL source, unlock
+	structureURL := fmt.Sprintf("/sap/bc/adt/ddic/structures/%s", strings.ToLower(opts.Name))
+	sourceURL := structureURL + "/source/main"
+
+	lock, err := c.LockObject(ctx, structureURL, "MODIFY")
+	if err != nil {
+		return result, fmt.Errorf("locking structure: %w", err)
+	}
+
+	params = url.Values{}
+	params.Set("lockHandle", lock.LockHandle)
+	if opts.Transport != "" {
+		params.Set("corrNr", opts.Transport)
+	}
+
+	_, err = c.transport.Request(ctx, sourceURL, &RequestOptions{
+		Method:      http.MethodPut,
+		Query:       params,
+		Body:        []byte(ddlSource),
+		ContentType: "text/plain; charset=utf-8",
+		Stateful:    true, // source PUT must run in the same stateful session as the lock
+	})
+	if err != nil {
+		_ = c.UnlockObject(ctx, structureURL, lock.LockHandle)
+		return result, fmt.Errorf("setting structure source: %w", err)
+	}
+
+	// Unlock BEFORE activation
+	_ = c.UnlockObject(ctx, structureURL, lock.LockHandle)
+
+	if !opts.Activate {
+		return result, nil
+	}
+
+	// Step 3: Activate
+	activation, err := c.Activate(ctx, structureURL, opts.Name)
+	if err != nil {
+		return result, fmt.Errorf("activating structure: %w", err)
+	}
+	if !activation.Success {
+		for _, m := range activation.Messages {
+			result.ActivationMessages = append(result.ActivationMessages, m.ShortText)
+		}
+		detail := strings.Join(result.ActivationMessages, "; ")
+		if detail == "" {
+			detail = "object remained inactive"
+		}
+		return result, fmt.Errorf("activating structure %s: %s", opts.Name, detail)
+	}
+
+	result.Activated = true
+	result.Status = "active"
+	return result, nil
 }

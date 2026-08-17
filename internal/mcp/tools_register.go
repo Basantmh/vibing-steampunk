@@ -1022,6 +1022,33 @@ func (s *Server) registerCRUDTools(shouldRegister func(string) bool) {
 		), s.handleCreateTable)
 	}
 
+	if shouldRegister("CreateStructure") {
+		s.mcpServer.AddTool(mcp.NewTool("CreateStructure",
+			mcp.WithDescription("Create a classic DDIC structure (SE11 structure, not a database table) from a simple JSON definition. Handles full workflow: create → set source → activate. Components are typed by an existing data element or a predefined ABAP type."),
+			mcp.WithString("name",
+				mcp.Required(),
+				mcp.Description("Structure name (uppercase, max 30 chars, must start with Z/Y). SAP rejects an underscore at the 2nd or 3rd position (message DT101): ZS_TEST is invalid, ZSTR_TEST is valid."),
+			),
+			mcp.WithString("description",
+				mcp.Required(),
+				mcp.Description("Short description of the structure"),
+			),
+			mcp.WithString("package",
+				mcp.Description("Target package (default: $TMP)"),
+			),
+			mcp.WithString("components",
+				mcp.Required(),
+				mcp.Description("JSON array of components. Each has a name plus EITHER data_element (existing DDIC data element) OR type (predefined ABAP type). Example: [{\"name\":\"BUKRS\",\"data_element\":\"BUKRS\"},{\"name\":\"AMOUNT\",\"type\":\"DEC\",\"length\":15,\"decimals\":2},{\"name\":\"NOTE\",\"type\":\"CHAR\",\"length\":40}]. Types: CHAR/NUMC/RAW (need length), DEC (length+decimals), INT1/INT2/INT4/INT8, FLTP, DATS, TIMS, UTCLONG, CLNT, LANG, STRING, RAWSTRING. CURR/QUAN are not supported (they need a currency/unit reference field) — use a data element instead."),
+			),
+			mcp.WithString("transport",
+				mcp.Description("Transport request number (optional for $TMP)"),
+			),
+			mcp.WithBoolean("activate_after_create",
+				mcp.Description("Activate the structure after creation (default: true). If false, the structure is left inactive."),
+			),
+		), s.handleCreateStructure)
+	}
+
 	if shouldRegister("CompareSource") {
 		s.mcpServer.AddTool(mcp.NewTool("CompareSource",
 			mcp.WithDescription("Compare source code of two objects and return unified diff. Supports all object types from GetSource."),

@@ -786,7 +786,7 @@ func GetAllToolNames() []string {
 		"SyntaxCheck", "Activate", "ActivatePackage", "PrettyPrint",
 		"GetPrettyPrinterSettings", "SetPrettyPrinterSettings",
 		"RunUnitTests", "RunATCCheck", "GetATCCustomizing",
-		"GetInactiveObjects", "CreatePackage", "CreateTable",
+		"GetInactiveObjects", "CreatePackage", "CreateTable", "CreateStructure",
 		"CompareSource", "CreateClassWithTests", "CreateTestInclude",
 		"CreateAndActivateProgram", "UpdateClassInclude",
 		// Code intelligence
@@ -845,7 +845,7 @@ func GetFocusedToolNames() []string {
 		// Development tools
 		"SyntaxCheck", "RunUnitTests", "RunATCCheck",
 		"Activate", "ActivatePackage", "PrettyPrint",
-		"GetInactiveObjects", "CreatePackage", "CreateTable",
+		"GetInactiveObjects", "CreatePackage", "CreateTable", "CreateStructure",
 		"CompareSource", "CloneObject", "GetClassInfo",
 		// Lock/Unlock
 		"LockObject", "UnlockObject",
